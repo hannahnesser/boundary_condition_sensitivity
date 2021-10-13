@@ -1,0 +1,31 @@
+python/__pycache__
+
+# sublme settings
+*sublime*
+
+# slurm files
+**slurm*
+**.out
+
+# log files
+**.log
+
+# Netcdf files
+**.nc
+**.nc4
+
+# csvs
+**.csv
+
+# images
+**.png
+**.gif
+
+# pkl files
+**.pkl
+
+# DS store
+**.DS_Store
+
+# Everything in scratch
+scratch/
