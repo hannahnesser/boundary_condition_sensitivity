@@ -29,7 +29,7 @@ plot_dir = '../plots'
 ## -------------------------------------------------------------------------##
 # Define the model parameters
 ## -------------------------------------------------------------------------##
-optimize_BC = True
+optimize_BC = False
 print_summary = False
 
 # Seed the random number generator
@@ -88,7 +88,7 @@ s_o_vec = 15*np.ones(nobs) #15
 #     # print(15**(nstate-i))
 #     s_o_vec[(i*nobs_per_cell):((i+1)*nobs_per_cell)] = (nstate - i)*15
 # print(s_o_vec)
-# s_o_vec[:1*nobs_per_cell] = 60
+# s_o_vec[:1*nobs_per_cell] = 35
 # s_o_vec[1*nobs_per_cell:2*nobs_per_cell] = 30
 # s_o_vec[2*nobs_per_cell:3*nobs_per_cell] = 30
 # s_o_vec[3*nobs_per_cell:4*nobs_per_cell] = 30
@@ -193,9 +193,6 @@ for i, optimize_BC in enumerate([True, False]):
     inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), s_o_vec, K_t]
     x_hat_t, s_hat, a_t, g_t = inv.solve_inversion(*inv_inputs, optimize_BC)
     y_hat_t = fm.forward_model(x_hat_t*x_a, y_init, BC_t, t, U, L, obs_t)
-    bw_base = inv.band_width(g_t*x_a.reshape(-1, 1)*3600*24)
-    ils_base = inv.influence_length(g_t*x_a.reshape(-1, 1)*3600*24)
-    base = [bw_base, bw_base, ils_base, ils_base]
 
     ax[0] = plot.plot_emis(ax[0], x_hat_t*x_a, c=fp.color(6), ls=ls[i],
                            marker='*', markersize=10,
@@ -241,245 +238,110 @@ fp.save_fig(fig, plot_dir, f'constant_BC_{BC_t:d}')
     # plt.close()
 
 ## -------------------------------------------------------------------------##
-# Plot gain matrix for a number of So vectors
-## -------------------------------------------------------------------------##
-x = np.arange(-1, 1.01, 0.01)
-sa_effect = np.zeros((len(x), 4))
-so_effect = np.zeros((len(x), 4))
-for ind, i in enumerate(x):
-    # Alter Sa
-    sa = (10**(2*i))*copy.deepcopy(s_a_vec)
-    g = inv.get_gain_matrix(sa, s_o_vec, K_t, optimize_BC=False)
-    g = g*x_a.reshape(-1, 1)*3600*24
-    sa_effect[ind, 0] = inv.band_width(g)
-    sa_effect[ind, 2] = inv.influence_length(g)
-
-    sa = copy.deepcopy(s_a_vec)
-    sa[0] *= (10**(2*i))
-    g = inv.get_gain_matrix(sa, s_o_vec, K_t, optimize_BC=False)
-    g = g*x_a.reshape(-1, 1)*3600*24
-    sa_effect[ind, 1] = inv.band_width(g)
-    sa_effect[ind, 3] = inv.influence_length(g)
-
-    # Alter So
-    so = (10**(2*i))*copy.deepcopy(s_o_vec)
-    g = inv.get_gain_matrix(s_a_vec, so, K_t, optimize_BC=False)
-    g = g*x_a.reshape(-1, 1)*3600*24
-    so_effect[ind, 0] = inv.band_width(g)
-    so_effect[ind, 2] = inv.influence_length(g)
-
-    so = copy.deepcopy(s_o_vec)
-    so[:nobs_per_cell] *= (10**(2*i))
-    g = inv.get_gain_matrix(s_a_vec, so, K_t, optimize_BC=False)
-    g = g*x_a.reshape(-1, 1)*3600*24
-    so_effect[ind, 1] = inv.band_width(g)
-    so_effect[ind, 3] = inv.influence_length(g)
-
-# Plotting
-# ls = ['Lifetime', 'Prior error', 'Observational error']
-# Iterate through band width and influence length scales
-suffix = ['bw', 'ils']
-yaxis = ['Gain matrix band width', 'Influence length scale']
-ylim = [(220, 310), (220, 310), (0.5, 5.5), (0.5, 5.5)]
-fig_summ, ax_summ = fp.get_figax(aspect=2, rows=2, cols=2,
-                                 sharex=True, sharey=True)
-# plt.subplots_adjust(wspace=0.5)
-# We want 0 and 1 to --> 1 and 2 and 3 --> 2
-for i, ax in enumerate(ax_summ.flatten()):
-    ax.scatter(1, base[i], c='grey', zorder=10, label='Base inversion')
-    ax.plot(10**x, sa_effect[:, i], c=fp.color(8), label='Prior error')
-    ax.plot(10**x, so_effect[:, i], c=fp.color(5), label='Observational error')
-    ax.set_ylim(ylim[i])
-    ax.set_xscale('log')
-
-ax_summ[0, 0] = fp.add_labels(ax_summ[0, 0], '', 'Gain matrix\nband width')
-ax_summ[0, 1] = fp.add_labels(ax_summ[0, 1], '', '')
-ax_summ[1, 0] = fp.add_labels(ax_summ[1, 0], 'Scale factor',
-                              'Influence\nlength scale')
-ax_summ[1, 1] = fp.add_labels(ax_summ[1, 1], 'Scale factor', '')
-
-handles_0, labels_0 = ax_summ[0, 0].get_legend_handles_labels()
-ax_summ[0, 0] = fp.add_legend(ax_summ[0, 0], handles=handles_0, labels=labels_0,
-                           bbox_to_anchor=(0.5, -0.1),
-                           loc='upper center', ncol=4,
-                           bbox_transform=fig_summ.transFigure)
-
-fp.save_fig(fig_summ, plot_dir, f'g_summary')
-
-# # Single grid cell adjustments
-# for i in range(2):
-#     fig_summ, ax_summ = fp.get_figax(aspect=1.66)
-#     ax_summ.scatter(1, base[i], c='grey', zorder=10,
-#                 label='Base inversion')
-#     ax_summ.plot(10**x, sa_effect[:, i+2], c=fp.color(8),
-#                  label='Prior error')
-#     ax_summ.plot(10**x, so_effect[:, i+2], c=fp.color(5),
-#                  label='Observational error')
-#     ax_summ = fp.add_labels(ax_summ, 'Scale factor', yaxis[i])
-#     ax_summ = fp.add_legend(ax_summ, bbox_to_anchor=(0.5, -0.25),
-#                             loc='upper center', ncol=4)
-#     # ax_summ.set_ylim(ylim[i])
-#     ax_summ.set_xscale('log')
-#     fp.save_fig(fig_summ, plot_dir, f'g_summary_adj_{suffix[i]}')
-
-
-# for i in range(-1, 1, 0.1):
-#     scale_factor = 10**(2*i)
-#     s_o_vec_adj = copy.deepcopy(s_o_vec)
-#     s_o_vec_adj[0] *= scale_factor
-
-#     # Calculate the gain matrix
-#     g = inv.get_gain_matrix(s_a_vec, s_o_vec_adj, K_t, optimize_BC=False)
-#     bw = inv.band_width(g)
-#     ils = inv.influence_length(g)
-
-#     # Plot
-#     # Make fig and ax
-#     fig = plt.figure()
-#     ax_g = plt.subplot2grid((1, nstate+7), (0, 0), colspan=nstate, aspect=1)
-#     ax_v = plt.subplot2grid((1, nstate+7), (0, nstate+1), colspan=6)
-
-#     # Plot matrices
-#     c = ax_g.imshow(g, cmap='RdBu_r',
-#                     norm=SymLogNorm(linthresh=1e-10, vmin=-5e-6, vmax=5e-6,
-#                                     base=10))
-#     ax_v.plot(g_sum, np.arange(nstate+1, 1, -1), color='black')
-
-#     # Aesthetics and Labels
-#     for ax in [ax_g, ax_v]:
-#         ax.tick_params(axis='both', which='both', left=False, bottom=False,
-#                        labelbottom=False, labelleft=False)
-
-#     ax_g = fp.add_title(ax_g, r'$\mathbf{G}$')
-#     ax_g = fp.add_labels(ax_g, 'Observations', 'State Vector')
-#     ax_g.text(0.98, 0.95, r'$\mathbf{S}_{\mathrm{O}} = %d$ ppb' % so_err,
-#     #ax_g.text(0.98, 0.95, r'$\mathbf{S}_{\mathrm{A}} = %d$ ppb/day' % sa_err,
-#     # ax_g.text(0.98, 0.95, f'U = {U} km/hr',
-#               ha='right', va='top',
-#               fontsize=config.LABEL_FONTSIZE*config.SCALE,
-#               transform=ax_g.transAxes)
-
-#     ax_v = fp.add_title(ax_v, r'$\sum_j \mathbf{G}_{ij}$')
-#     ax_v.set_xlim(0, 5e-5)
-
-#     # # Add colorbar
-#     cax = fp.add_cax(fig, ax_g, horizontal=True)
-#     cbar = fig.colorbar(c, cax=cax, orientation='horizontal')#, ticks=500*np.arange(0, 5))
-#     cbar = fp.format_cbar(cbar, '', horizontal=True)
-
-#     ax_v.set_facecolor(fp.color(5, cmap='RdBu_r', lut=11))
-#     # Save plot
-#     fp.save_fig(fig, plot_dir, f'g_so_adj_{so_err}')
-
-#     # Close
-#     plt.close()
-
-## -------------------------------------------------------------------------##
 # Constant boundary condition perturbations
 ## -------------------------------------------------------------------------##
-# # Test 2: constant BC perturbation
-# perts = [25, 50, 100]
-# # fig_summ, ax_summ = format_plot(nstate, nplots=2, sharex=True)
-# fig_summ, ax_summ = plot.format_plot(nstate)
-# fig_cf, ax_cf = plot.format_plot(nstate)
-# for i, pert in enumerate(perts):
-#     BC = BC_t + pert
+# Test 2: constant BC perturbation
+perts = [25, 50, 100]
+# fig_summ, ax_summ = format_plot(nstate, nplots=2, sharex=True)
+fig_summ, ax_summ = plot.format_plot(nstate)
+fig_cf, ax_cf = plot.format_plot(nstate)
+for i, pert in enumerate(perts):
+    BC = BC_t + pert
 
-#     # Solve inversion
-#     K = inv.build_jacobian(x_a, y_init, BC, t, U, L, obs_t, optimize_BC)
-#     y_a = fm.forward_model(x_a, y_init, BC, t, U, L, obs_t)
-#     inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), s_o_vec, K]
-#     x_hat, s_hat, a, g = inv.solve_inversion(*inv_inputs, optimize_BC)
-#     y_hat = fm.forward_model(x_hat*x_a, y_init, BC, t, U, L, obs_t)
+    # Solve inversion
+    K = inv.build_jacobian(x_a, y_init, BC, t, U, L, obs_t, optimize_BC)
+    y_a = fm.forward_model(x_a, y_init, BC, t, U, L, obs_t)
+    inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), s_o_vec, K]
+    x_hat, s_hat, a, g = inv.solve_inversion(*inv_inputs, optimize_BC)
+    y_hat = fm.forward_model(x_hat*x_a, y_init, BC, t, U, L, obs_t)
 
-#     # Plot inversion
-#     fig, ax = plot.plot_inversion(x_a, x_hat, x_t, x_hat_true=x_hat_t,
-#                               optimize_BC=optimize_BC)
-#     ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
-#     fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}')
+    # Plot inversion
+    fig, ax = plot.plot_inversion(x_a, x_hat, x_t, x_hat_true=x_hat_t,
+                              optimize_BC=optimize_BC)
+    ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
+    fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}')
 
-#     # Plot observations
-#     fig, ax = plot.plot_obs(nstate, y, y_a, y_init, obs_t, optimize_BC)
-#     ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
-#     fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_obs')
+    # Plot observations
+    fig, ax = plot.plot_obs(nstate, y, y_a, y_init, obs_t, optimize_BC)
+    ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
+    fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_obs')
 
-#     fig, ax = plot.plot_obs_diff(nstate, y, y_hat, y_a, obs_t, optimize_BC)
-#     ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
-#     fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_obs_diff')
+    fig, ax = plot.plot_obs_diff(nstate, y, y_hat, y_a, obs_t, optimize_BC)
+    ax = fp.add_title(ax, f'High Boundary Condition\n(BC = {BC:d} ppb)')
+    fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_obs_diff')
 
-#     # Plot cost function
-#     fig, ax = plot.plot_cost_func(x_hat, x_a, s_a_vec, y_hat, y, s_o_vec,
-#                                  obs_t, optimize_BC)
-#     ax = fp.add_title(ax, f'Cost Function Components\n(BC = {BC:d} ppb)')
-#     fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_cost_func')
+    # Plot cost function
+    fig, ax = plot.plot_cost_func(x_hat, x_a, s_a_vec, y_hat, y, s_o_vec,
+                                 obs_t, optimize_BC)
+    ax = fp.add_title(ax, f'Cost Function Components\n(BC = {BC:d} ppb)')
+    fp.save_fig(fig, plot_dir, f'constant_BC_{BC:d}_cost_func')
 
-#     # Summary plot
-#     ax_summ.plot(xp, np.abs(x_hat - x_hat_t)*x_a*3600*24,
-#                     c=fp.color(k=4*i), lw=1, ls='-',
-#                     label=f'{pert:d}/-{pert:d} ppb')
-#     ax_summ.plot(xp, np.abs(-pert*g.sum(axis=1))*x_a*3600*24,
-#                     c=fp.color(k=4*i), lw=2, ls='--')
+    # Summary plot
+    ax_summ.plot(xp, np.abs(x_hat - x_hat_t)*x_a*3600*24,
+                    c=fp.color(k=4*i), lw=1, ls='-',
+                    label=f'{pert:d}/-{pert:d} ppb')
+    ax_summ.plot(xp, np.abs(-pert*g.sum(axis=1))*x_a*3600*24,
+                    c=fp.color(k=4*i), lw=2, ls='--')
 
-#     # Summary cost function plot
-#     x_diff = (x_hat - np.ones(nstate))**2/s_a_vec
-#     y_diff = ((y - y_hat)**2/s_o_vec.reshape(y.shape))
-#     ax_cf.plot(xp, x_diff, c=fp.color(k=4*i), lw=2, ls='--',
-#                label=f'{pert:d}/-{pert:d} ppb')
-#     ax_cf.plot(xp, y_diff.sum(axis=1), c=fp.color(k=4*i), lw=2, ls='-.')
+    # Summary cost function plot
+    x_diff = (x_hat - np.ones(nstate))**2/s_a_vec
+    y_diff = ((y - y_hat)**2/s_o_vec.reshape(y.shape))
+    ax_cf.plot(xp, x_diff, c=fp.color(k=4*i), lw=2, ls='--',
+               label=f'{pert:d}/-{pert:d} ppb')
+    ax_cf.plot(xp, y_diff.sum(axis=1), c=fp.color(k=4*i), lw=2, ls='-.')
 
-# # Add ~10% errors
-# ax_summ.fill_between([0, nstate+1], 10, color='grey', alpha=0.2,
-#                      label=r'$\approx$ 10\% error')
+# Add ~10% errors
+ax_summ.fill_between([0, nstate+1], 10, color='grey', alpha=0.2,
+                     label=r'$\approx$ 10\% error')
 
-# # Add text
-# fp.add_title(ax_summ, 'Constant Boundary Condition Perturbations')
-# plot.add_text_label(ax_summ, optimize_BC)
-# fp.add_labels(ax_summ, 'State vector element',
-#               r'$\vert\Delta\hat{x}\vert$ (ppb/day)')
+# Add text
+fp.add_title(ax_summ, 'Constant Boundary Condition Perturbations')
+plot.add_text_label(ax_summ, optimize_BC)
+fp.add_labels(ax_summ, 'State vector element',
+              r'$\vert\Delta\hat{x}\vert$ (ppb/day)')
 
-# # Legend for summary plot
-# custom_lines = [Line2D([0], [0], color='grey', lw=1, ls='-'),
-#                 Line2D([0], [0], color='grey', lw=2, ls='--')]
-# custom_labels = ['Numerical solution', 'Predicted solution']
-# handles, labels = ax_summ.get_legend_handles_labels()
-# custom_lines.extend(handles)
-# custom_labels.extend(labels)
-# fp.add_legend(ax_summ, handles=custom_lines, labels=custom_labels,
-#               bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)
+# Legend for summary plot
+custom_lines = [Line2D([0], [0], color='grey', lw=1, ls='-'),
+                Line2D([0], [0], color='grey', lw=2, ls='--')]
+custom_labels = ['Numerical solution', 'Predicted solution']
+handles, labels = ax_summ.get_legend_handles_labels()
+custom_lines.extend(handles)
+custom_labels.extend(labels)
+fp.add_legend(ax_summ, handles=custom_lines, labels=custom_labels,
+              bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)
 
-# # Set limits
-# ax_summ.set_ylim(0, 100)
+# Set limits
+ax_summ.set_ylim(0, 100)
 
-# # Save plot
-# fp.save_fig(fig_summ, plot_dir, f'constant_BC_summary')
-# plt.close()
+# Save plot
+fp.save_fig(fig_summ, plot_dir, f'constant_BC_summary')
+plt.close()
 
-# # Cost function summary plot
-# fp.add_title(ax_cf, 'Constant Boundary Condition Perturbations')
-# plot.add_text_label(ax_cf, optimize_BC)
-# fp.add_labels(ax_cf, 'State vector element', r'$J(\hat{x})$')
+# Cost function summary plot
+fp.add_title(ax_cf, 'Constant Boundary Condition Perturbations')
+plot.add_text_label(ax_cf, optimize_BC)
+fp.add_labels(ax_cf, 'State vector element', r'$J(\hat{x})$')
 
-# # Legend for summary plot
-# custom_lines = [Line2D([0], [0], color='grey', lw=2, ls='--'),
-#                 Line2D([0], [0], color='grey', lw=2, ls='-.')]
-# custom_labels = [r'$J_A(\hat{x})$', r'$J_O(\hat{x})$']
-# handles, labels = ax_cf.get_legend_handles_labels()
-# custom_lines.extend(handles)
-# custom_labels.extend(labels)
-# fp.add_legend(ax_cf, handles=custom_lines, labels=custom_labels,
-#               bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)
+# Legend for summary plot
+custom_lines = [Line2D([0], [0], color='grey', lw=2, ls='--'),
+                Line2D([0], [0], color='grey', lw=2, ls='-.')]
+custom_labels = [r'$J_A(\hat{x})$', r'$J_O(\hat{x})$']
+handles, labels = ax_cf.get_legend_handles_labels()
+custom_lines.extend(handles)
+custom_labels.extend(labels)
+fp.add_legend(ax_cf, handles=custom_lines, labels=custom_labels,
+              bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)
 
-# # Set limits
-# ax_cf.set_ylim(0, 30)
+# Set limits
+ax_cf.set_ylim(0, 30)
 
-# # Save plot
-# fp.save_fig(fig_cf, plot_dir, f'constant_BC_CF_summary')
-# plt.close()
+# Save plot
+fp.save_fig(fig_cf, plot_dir, f'constant_BC_CF_summary')
+plt.close()
 
 ## -------------------------------------------------------------------------##
 # Oscillating boundary condition perturbations
 ## -------------------------------------------------------------------------##
-# optimize_BC = True
 # # Summary plot
 # fig_perts, ax_perts = fp.get_figax(aspect=5)
 # fig_summ, ax_summ = plot.format_plot(nstate)
@@ -487,18 +349,18 @@ fp.save_fig(fig_summ, plot_dir, f'g_summary')
 # # Iteration through perturbations
 # # BC = [vertical_shift, amplitude, frequency]
 # BC1 = [1975, -100, 1]
-# BC2 = [1975, 100, 1]
-# BC3 = [1975, -100, 2]
-# BC4 = [1975, -100, 4]
-# # BC5 = [1975, -100, 6]
-# BC6 = [1975, -50, 1]
+# # BC2 = [1975, 100, 1]
+# # BC3 = [1975, -100, 2]
+# # BC4 = [1975, -100, 4]
+# # # BC5 = [1975, -100, 6]
+# # BC6 = [1975, -50, 1]
 # # # BC7 = [1975, -50, 2]
-# BCs = [BC1, BC2, BC3, BC4, BC6]
+# # BCs = [BC1, BC2, BC3, BC4, BC6]
 # # BCs = [BC5]
-# # BCs = [BC1]
+# BCs = [BC1]
 # for i, BC_l in enumerate(BCs):
-#     # i = 0
-#     n = len(BCs)
+#     i = 0
+#     n = 5 # len(BCs)
 #     BC = BC_l[0] + BC_l[1]*np.sin(BC_l[2]*2*np.pi/t.max()*t)
 
 #     # Solve inversion
@@ -597,10 +459,7 @@ fp.save_fig(fig_summ, plot_dir, f'g_summary')
 #               r'$\vert\Delta\hat{x}\vert$ (ppb/day)')
 
 # # Set limits
-# ax_summ.set_ylim(0, 100)
-# # # Add ~10% errors
-# ax_summ.fill_between([0, nstate+1], 10, color='grey', alpha=0.2,
-#                      label=r'$\approx$ 10\% error')
+# ax_summ.set_ylim(0, 200)
 
 # # Add legend
 # fp.add_legend(ax_summ, bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)

@@ -52,7 +52,6 @@ def solve_inversion(x_a, s_a_vec, y, y_a, s_o_vec, k,
     # Get the s_a_vec
     if optimize_BC:
         s_a_vec = np.append(s_a_vec, 0.075)
-        print(s_a_vec)
 
     # Get the inverse of s_a and s_o
     s_a_inv = np.diag(1/s_a_vec)
@@ -68,10 +67,35 @@ def solve_inversion(x_a, s_a_vec, y, y_a, s_o_vec, k,
     x_hat = (x_a + g @ (y - k @ x_a - c))
 
     if optimize_BC:
-        print(x_hat)
         x_hat = x_hat[:-1]
         s_hat = s_hat[:-1, :-1]
         a = a[:-1, :-1]
         g = g[:-1, :-1]
 
     return x_hat, s_hat, a, g
+
+def get_gain_matrix(s_a_vec, s_o_vec, k, optimize_BC):
+    # Get the s_a_vec
+    if optimize_BC:
+        s_a_vec = np.append(s_a_vec, 0.075)
+
+    # Get the inverse of s_a and s_o
+    s_a_inv = np.diag(1/s_a_vec)
+    s_o_inv = np.diag(1/s_o_vec)
+
+    # Solve the inversion
+    s_hat = inv(s_a_inv + k.T @ s_o_inv @ k)
+    g = s_hat @ k.T @ s_o_inv
+
+    return np.array(g)
+
+def band_width(g):
+    g_max = g.max(axis=1).reshape(-1, 1)*1e-3
+    band_width = (np.abs(g) > g_max).sum(axis=1).max()
+    return band_width
+
+def influence_length(g, bc_err=100):
+    # calculate influence length scale
+    g_sum = g.sum(axis=1).reshape(-1, 1)*bc_err
+    ils = (g_sum > 10).sum()
+    return(ils)

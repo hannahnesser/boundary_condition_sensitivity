@@ -155,7 +155,7 @@ def add_cax(fig, ax, cbar_pad_inches=0.25, horizontal=False):
         # y0
         fig_height = fig.get_size_inches()[1]
         y0_init = axis.get_position().y0
-        y0 = (fig_height*y0_init - cbar_pad_inches*config.SCALE)/fig_height
+        y0 = (fig_height*y0_init - 3*cbar_pad_inches*config.SCALE)/fig_height
 
         # Height
         height = 0.1*config.SCALE/fig_height
@@ -313,5 +313,5 @@ def plot_one_to_one(ax):
 def save_fig(fig, loc, name, **kwargs):
     fig.savefig(join(loc, name + '.png'),
                 bbox_inches='tight', dpi=500,
-                transparent=True, **kwargs)
+                **kwargs)
     print('Saved %s' % name + '.png')
