@@ -97,5 +97,8 @@ def band_width(g):
 def influence_length(g, bc_err=100):
     # calculate influence length scale
     g_sum = g.sum(axis=1).reshape(-1, 1)*bc_err
-    ils = (g_sum > 10).sum()
+    ils = np.where(np.abs(g_sum) > 10)[0]
+    ils_comp = np.arange(0, len(ils))
+    ils = (ils == ils_comp).sum()
+    # g_sum.argwhere(g_sum > 10)[0]
     return(ils)
