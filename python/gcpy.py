@@ -171,6 +171,25 @@ def comparison_stats(xdata, ydata):
     bias = (ydata - xdata).mean()
     return m, b, r, bias
 
+def rma_modified(xdata, ydata):
+    m, _, _, _ = np.linalg.lstsq(xdata.reshape((-1, 1)),
+                                 ydata.reshape((-1, 1)), rcond=None)
+    slope = np.sign(m[0][0])*ydata.std()/xdata.std()
+    return slope
+
+def rma(xdata, ydata):
+    _, _, r, _ = comparison_stats(xdata, ydata)
+    slope = np.sign(r)*ydata.std()/xdata.std()
+    return slope
+
+
+    # if relative:
+    #     y = ydata/y.max()
+    #     x = xdata/x.max()
+    # else:
+    #     y = (ydata - ydata.min())/(ydata.max() - ydata.min())
+    #     x = (xdata - xdata.min())/(xdata.max() - xdata.min())
+
 ## -------------------------------------------------------------------------##
 ## Grid functions
 ## -------------------------------------------------------------------------##

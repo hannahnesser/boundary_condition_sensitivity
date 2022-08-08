@@ -74,7 +74,7 @@ def solve_inversion(x_a, s_a_vec, y, y_a, s_o_vec, k,
 
     return x_hat, s_hat, a, g
 
-def get_gain_matrix(s_a_vec, s_o_vec, k, optimize_BC):
+def get_gain_matrix(s_a_vec, s_o_vec, k, optimize_BC=False):
     # Get the s_a_vec
     if optimize_BC:
         s_a_vec = np.append(s_a_vec, 0.075)
@@ -94,11 +94,73 @@ def band_width(g):
     band_width = (np.abs(g) > g_max).sum(axis=1).max()
     return band_width
 
-def influence_length(g, bc_err=100):
-    # calculate influence length scale
-    g_sum = g.sum(axis=1).reshape(-1, 1)*bc_err
-    ils = np.where(np.abs(g_sum) > 10)[0]
-    ils_comp = np.arange(0, len(ils))
-    ils = (ils == ils_comp).sum()
-    # g_sum.argwhere(g_sum > 10)[0]
-    return(ils)
+def influence_length(xhat, xhat_true, threshold=0.1, relative=True):
+    # if relative:
+    #     print(f'Applying a threshold of {threshold:.2f} (relative).')
+    # else:
+    #     print(f'Applying a threshold of {threshold:.2f} (absolute).')
+
+    xhat_diff = np.abs(xhat - xhat_true).reshape(-1,)
+    print(xhat_diff)
+    print(np.where(xhat_diff < threshold))
+    ils = np.where(xhat_diff < threshold)[0][0]
+    return ils
+
+def xhat_err(xhat, xhat_true, ils):
+    xhat_diff = np.abs(xhat - xhat_true).reshape(-1,)
+    in_ils_err = xhat_diff[:ils].mean()
+    out_ils_err = xhat_diff[ils:].mean()
+    return in_ils_err, out_ils_err
+
+
+    # # calculate influence length scale
+    # g_sum = g.sum(axis=1).reshape(-1, 1)*bc_err
+    # ils = np.where(np.abs(g_sum) > 10)[0]
+    # ils_comp = np.arange(0, len(ils))
+    # ils = (ils == ils_comp).sum()
+    # # g_sum.argwhere(g_sum > 10)[0]
+
+# def avg_err(xhat, xhat_true):
+
+
+## -------------------------------------------------------------------------##
+## Cluster functions
+## -------------------------------------------------------------------------##
+def match_data_to_clusters(data, clusters, default_value=0):
+    '''
+    Matches inversion data to a cluster file.
+    Parameters:
+        data (np.array)        : Inversion data. Must have the same length
+                                 as the number of clusters, and must be
+                                 sorted in ascending order of cluster number
+                                 - i.e. [datapoint for cluster 1, datapoint for
+                                 cluster 2, datapoint for cluster 3...]
+        clusters (xr.Datarray) : 2d array of cluster values for each gridcell.
+                                 You can get this directly from a cluster file
+                                 used in an analytical inversion.
+                                 Dimensions: ('lat','lon')
+        default_value (numeric): The fill value for the array returned.
+    Returns:
+        result (xr.Datarray)   : A 2d array on the GEOS-Chem grid, with
+                                 inversion data assigned to each gridcell based
+                                 on the cluster file.
+                                 Missing data default to the default_value.
+                                 Dimensions: same as clusters ('lat','lon').
+    '''
+    # check that length of data is the same as number of clusters
+    clust_list = np.unique(clusters)[np.unique(clusters)!=0] # unique, nonzero clusters
+    assert len(data)==len(clust_list), (f'Data length ({len(data)}) is not the same as '
+                                        f'the number of clusters ({len(clust_list)}).')
+
+    # build a lookup table from data.
+    #    data_lookup[0] = default_value (value for cluster 0),
+    #    data_lookup[1] = value for cluster 1, and so forth
+    data_lookup = np.append(default_value, data)
+
+    # use fancy indexing to map data to 2d cluster array
+    cluster_index = clusters.squeeze().data.astype(int).tolist()
+    result = clusters.copy().squeeze()         # has same shape/dims as clusters
+    result.values = data_lookup[cluster_index] # map data to clusters
+
+    return result
+

@@ -94,15 +94,16 @@ K_t_abs = K_t/x_a
 ## -------------------------------------------------------------------------##
 # Prepare for scale factor adjustments
 ## -------------------------------------------------------------------------##
-bootstrap_n = int(5e4)
+bootstrap_n = int(5)#5e4
 sf = np.arange(-1.5, 1.6, 0.1)
 sa_effect = np.zeros((len(sf), 4, bootstrap_n))
 so_effect = np.zeros((len(sf), 4, bootstrap_n))
+x_hat_rec = np.zeros((nstate, bootstrap_n))
 
 ## -------------------------------------------------------------------------##
 # Bootstrap through different random states
 ## -------------------------------------------------------------------------##
-for rn in range(1, bootstrap_n):
+for rn in range(1, bootstrap_n+1):
     if rn % 1000 == 0:
         print(rn/bootstrap_n*100, '% complete')
 
@@ -120,37 +121,49 @@ for rn in range(1, bootstrap_n):
     # Calculate the Jacobian
     K_t = K_t_abs*x_a
 
+    # Calculate the prior model
+    y_a = fm.forward_model(x_a, y_init, BC_t, t, U, L, obs_t)
+
+    # Solve the inversion
+    inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), s_o_vec, K_t]
+    x_hat_t, _, _, _ = inv.solve_inversion(*inv_inputs, optimize_BC)
+    x_hat_rec[:, rn-1] = x_hat_t
+
     ## ---------------------------------------------------------------------##
     # Iterate through perturbations to Sa and So
     ## ---------------------------------------------------------------------##
     for ind, i in enumerate(sf):
         # Alter Sa
         sa = (10**(2*i))*copy.deepcopy(s_a_vec)
-        g = inv.get_gain_matrix(sa, s_o_vec, K_t, optimize_BC=False)
+        inv_inputs = [x_a, sa, y.flatten(), y_a.flatten(), s_o_vec, K_t]
+        x_hat, _, _, g = inv.solve_inversion(*inv_inputs, optimize_BC)
         g = g*x_a.reshape(-1, 1)*3600*24
-        sa_effect[ind, 0, rn] = inv.band_width(g)
-        sa_effect[ind, 2, rn] = inv.influence_length(g)
+        sa_effect[ind, 0, rn-1] = inv.band_width(g)
+        sa_effect[ind, 2, rn-1] = inv.influence_length(x_hat, x_hat_t)
 
         sa = copy.deepcopy(s_a_vec)
         sa[0] *= (10**(2*i))
-        g = inv.get_gain_matrix(sa, s_o_vec, K_t, optimize_BC=False)
+        inv_inputs = [x_a, sa, y.flatten(), y_a.flatten(), s_o_vec, K_t]
+        x_hat, _, _, g = inv.solve_inversion(*inv_inputs, optimize_BC)
         g = g*x_a.reshape(-1, 1)*3600*24
-        sa_effect[ind, 1, rn] = inv.band_width(g)
-        sa_effect[ind, 3, rn] = inv.influence_length(g)
+        sa_effect[ind, 1, rn-1] = inv.band_width(g)
+        sa_effect[ind, 2, rn-1] = inv.influence_length(x_hat, x_hat_t)
 
         # Alter So
         so = (10**(2*i))*copy.deepcopy(s_o_vec)
-        g = inv.get_gain_matrix(s_a_vec, so, K_t, optimize_BC=False)
+        inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), so, K_t]
+        x_hat, _, _, g = inv.solve_inversion(*inv_inputs, optimize_BC)
         g = g*x_a.reshape(-1, 1)*3600*24
-        so_effect[ind, 0, rn] = inv.band_width(g)
-        so_effect[ind, 2, rn] = inv.influence_length(g)
+        so_effect[ind, 0, rn-1] = inv.band_width(g)
+        sa_effect[ind, 2, rn-1] = inv.influence_length(x_hat, x_hat_t)
 
         so = copy.deepcopy(s_o_vec)
         so[:nobs_per_cell] *= (10**(2*i))
-        g = inv.get_gain_matrix(s_a_vec, so, K_t, optimize_BC=False)
+        inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), so, K_t]
+        x_hat, _, _, g = inv.solve_inversion(*inv_inputs, optimize_BC)
         g = g*x_a.reshape(-1, 1)*3600*24
-        so_effect[ind, 1, rn] = inv.band_width(g)
-        so_effect[ind, 3, rn] = inv.influence_length(g)
+        so_effect[ind, 1, rn-1] = inv.band_width(g)
+        sa_effect[ind, 2, rn-1] = inv.influence_length(x_hat, x_hat_t)
 
 ## -------------------------------------------------------------------------##
 # Average bootstrapped results
@@ -158,55 +171,52 @@ for rn in range(1, bootstrap_n):
 so_effect_sd = np.std(so_effect, axis=2)
 so_effect = np.mean(so_effect, axis=2)
 
-print(so_effect)
-print(so_effect_sd)
-
 sa_effect_sd = np.std(sa_effect, axis=2)
 sa_effect = np.mean(sa_effect, axis=2)
 
 ## -------------------------------------------------------------------------##
 # Plot
 ## -------------------------------------------------------------------------##
-# ls = ['Lifetime', 'Prior error', 'Observational error']
-# Iterate through band width and influence length scales
-suffix = ['bw', 'ils']
-yaxis = ['Gain matrix band width', 'Influence length scale']
-ylim = [(220, 320), (220, 320), (0.5, 13.5), (0.5, 13.5)]
-fig_summ, ax_summ = fp.get_figax(aspect=2, rows=2, cols=2,
-                                 sharex=True, sharey=True)
-# plt.subplots_adjust(wspace=0.5)
-# We want 0 and 1 to --> 1 and 2 and 3 --> 2
-for i, ax in enumerate(ax_summ.flatten()):
-    ax.axvline(1, c='grey', zorder=10, ls='--', label='Base inversion')
-    ax.plot(10**sf, sa_effect[:, i], c=fp.color(8), label='Prior error')
-    ax.fill_between(10**sf,
-                    sa_effect[:, i] - sa_effect_sd[:, i],
-                    sa_effect[:, i] + sa_effect_sd[:, i],
-                    color=fp.color(8), alpha=0.2, zorder=-1)
-    ax.plot(10**sf, so_effect[:, i], c=fp.color(5), label='Observational error')
-    ax.fill_between(10**sf,
-                    so_effect[:, i] - so_effect_sd[:, i],
-                    so_effect[:, i] + so_effect_sd[:, i],
-                    color=fp.color(5), alpha=0.2, zorder=-1)
-    ax.set_ylim(ylim[i])
-    ax.set_xscale('log')
+# # ls = ['Lifetime', 'Prior error', 'Observational error']
+# # Iterate through band width and influence length scales
+# suffix = ['bw', 'ils']
+# yaxis = ['Gain matrix band width', 'Influence length scale']
+# ylim = [(220, 320), (220, 320), (0.5, 13.5), (0.5, 13.5)]
+# fig_summ, ax_summ = fp.get_figax(aspect=2, rows=2, cols=2,
+#                                  sharex=True, sharey=True)
+# # plt.subplots_adjust(wspace=0.5)
+# # We want 0 and 1 to --> 1 and 2 and 3 --> 2
+# for i, ax in enumerate(ax_summ.flatten()):
+#     ax.axvline(1, c='grey', zorder=10, ls='--', label='Base inversion')
+#     ax.plot(10**sf, sa_effect[:, i], c=fp.color(8), label='Prior error')
+#     ax.fill_between(10**sf,
+#                     sa_effect[:, i] - sa_effect_sd[:, i],
+#                     sa_effect[:, i] + sa_effect_sd[:, i],
+#                     color=fp.color(8), alpha=0.2, zorder=-1)
+#     ax.plot(10**sf, so_effect[:, i], c=fp.color(5), label='Observational error')
+#     ax.fill_between(10**sf,
+#                     so_effect[:, i] - so_effect_sd[:, i],
+#                     so_effect[:, i] + so_effect_sd[:, i],
+#                     color=fp.color(5), alpha=0.2, zorder=-1)
+#     ax.set_ylim(ylim[i])
+#     ax.set_xscale('log')
 
-# Titles
-ax_summ[0, 0] = fp.add_title(ax_summ[0, 0], 'Full domain scaled')
-ax_summ[0, 1] = fp.add_title(ax_summ[0, 1], 'First grid cell scaled')
+# # Titles
+# ax_summ[0, 0] = fp.add_title(ax_summ[0, 0], 'Full domain scaled')
+# ax_summ[0, 1] = fp.add_title(ax_summ[0, 1], 'First grid cell scaled')
 
-# Axis labels
-ax_summ[0, 0] = fp.add_labels(ax_summ[0, 0], '', 'Gain matrix\nband width')
-ax_summ[0, 1] = fp.add_labels(ax_summ[0, 1], '', '')
-ax_summ[1, 0] = fp.add_labels(ax_summ[1, 0], 'Scale factor',
-                              'Influence\nlength scale')
-ax_summ[1, 1] = fp.add_labels(ax_summ[1, 1], 'Scale factor', '')
+# # Axis labels
+# ax_summ[0, 0] = fp.add_labels(ax_summ[0, 0], '', 'Gain matrix\nband width')
+# ax_summ[0, 1] = fp.add_labels(ax_summ[0, 1], '', '')
+# ax_summ[1, 0] = fp.add_labels(ax_summ[1, 0], 'Scale factor',
+#                               'Influence\nlength scale')
+# ax_summ[1, 1] = fp.add_labels(ax_summ[1, 1], 'Scale factor', '')
 
-# Legend
-handles_0, labels_0 = ax_summ[0, 0].get_legend_handles_labels()
-ax_summ[0, 0] = fp.add_legend(ax_summ[0, 0], handles=handles_0, labels=labels_0,
-                           bbox_to_anchor=(0.5, -0.1),
-                           loc='upper center', ncol=4,
-                           bbox_transform=fig_summ.transFigure)
+# # Legend
+# handles_0, labels_0 = ax_summ[0, 0].get_legend_handles_labels()
+# ax_summ[0, 0] = fp.add_legend(ax_summ[0, 0], handles=handles_0, labels=labels_0,
+#                            bbox_to_anchor=(0.5, -0.1),
+#                            loc='upper center', ncol=4,
+#                            bbox_transform=fig_summ.transFigure)
 
-fp.save_fig(fig_summ, plot_dir, f'g_summary')
+# fp.save_fig(fig_summ, plot_dir, f'g_summary')

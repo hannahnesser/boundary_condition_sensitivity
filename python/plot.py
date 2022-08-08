@@ -7,6 +7,7 @@ import sys
 sys.path.append('.')
 import format_plots as fp
 import config
+import inversion as inv
 
 ## -------------------------------------------------------------------------##
 # Define plotting functions
@@ -219,3 +220,111 @@ def add_text_label(ax, optimize_BC):
     ax.text(0.98, 0.95, txt, ha='right', va='top',
                  fontsize=config.LABEL_FONTSIZE*config.SCALE,
                  transform=ax.transAxes)
+
+## -------------------------------------------------------------------------##
+# Define Permian plotting functions
+## -------------------------------------------------------------------------##
+## -------------------------------------------------------------------------##
+def plot_state(data, clusters_plot, default_value=0, cbar=True,
+               category=None, time=None, category_list=None,
+               time_list=None, cluster_list=None, **kw):
+    '''
+    Plots a state vector element.
+    Parameters:
+        data (np.array)         : Inversion data.
+                                  Dimensions: nstate
+        clusters (xr.Datarray)  : 2d array of cluster values for each gridcell.
+                                  You can get this directly from a cluster file
+                                  used in an analytical inversion.
+                                  Dimensions: ('lat','lon')
+    Optional Parameters:
+        default_value (numeric) : The fill value for the array returned.
+        cbar (bool)             : Should the function a colorbar?
+        category (string)       : The category you would like to extract. Must match with
+                                  element(s) in in category_list.
+        time (string)           : The time you would like to extract. Must match with
+                                  element(s) in time_list. If there is no time, use None.
+        category_list (list)    : The category labels for each element of the state vector.
+                                  Dimensions: nstate
+        time_list (list)        : The time labels for each element of the state vector.
+                                  Dimensions: nstate
+        cluster_list (list)     : Cluster numbers for each element of the state vector.
+                                  If this option is not included, the data must be
+                                  in ascending order of cluster number.
+                                  Dimensions: nstate.
+
+    Returns:
+        fig, ax, c: Figure, axis, and colorbar for an mpl plot.
+    '''
+    # protect inputs from modification
+    data_to_plot = np.copy(data)
+
+    # Select one "layer" at a time
+    # each "layer" corresponds to one "2d cluster file"
+    # if you only have one layer in your dataset, you can skip this.
+    if ((category is not None) or (time is not None)
+        or (category_list is not None) or (time_list is not None)
+        or (cluster_list is not None) ):
+        data_to_plot = get_one_statevec_layer(data_to_plot, category=category, time=time,
+                                              category_list=category_list,
+                                              time_list=time_list,
+                                              cluster_list=cluster_list)
+
+    # Put the state vector layer back on the 2d GEOS-Chem grid
+    # matches the data to lat/lon data using a cluster file
+    data_to_plot = inv.match_data_to_clusters(data_to_plot, clusters_plot, default_value)
+
+    # Plot
+    fig, ax, c = plot_state_format(data_to_plot, default_value, cbar, **kw)
+    return fig, ax, c
+
+def plot_state_format(data, default_value=0, cbar=True, **kw):
+    '''
+    Format and plot one layer of the state vector.
+    Parameters:
+        data (xr.DataArray)     : One layer of the state vector, mapped onto a
+                                  2d GEOS-Chem grid using a cluster file. If
+                                  your state vector has only one layer,
+                                  this may contain your entire state vector.
+                                  Dimensions: ('lat','lon')
+        default_value (numeric) : The fill value for the array returned.
+        cbar (bool)             : Should the function plot a colorbar?
+    '''
+    # Get kw
+    title = kw.pop('title', '')
+    kw['cmap'] = kw.get('cmap', 'viridis')
+    kw['vmin'] = kw.get('vmin', data.min())
+    kw['vmax'] = kw.get('vmax', data.max())
+    kw['add_colorbar'] = False
+    cbar_kwargs = kw.pop('cbar_kwargs', {})
+    label_kwargs = kw.pop('label_kwargs', {})
+    title_kwargs = kw.pop('title_kwargs', {})
+    map_kwargs = kw.pop('map_kwargs', {})
+    fig_kwargs = kw.pop('fig_kwargs', {})
+
+    # Get figure
+    lat_range = [data.lat.min(), data.lat.max()]
+    lon_range = [data.lon.min(), data.lon.max()]
+    fig, ax  = fp.get_figax(maps=True, lats=lat_range, lons=lon_range,
+                            **fig_kwargs)
+
+    # Plot data
+    c = data.plot(ax=ax, snap=True, **kw)
+
+    # Set limits
+    ax.set_xlim(lon_range)
+    ax.set_ylim(lat_range)
+
+    # Add title and format map
+    ax = fp.add_title(ax, title, **title_kwargs)
+    ax = fp.format_map(ax, data.lat, data.lon, **map_kwargs)
+
+    if cbar:
+        cbar_title = cbar_kwargs.pop('title', '')
+        cax = fp.add_cax(fig, ax)
+        cb = fig.colorbar(c, ax=ax, cax=cax, **cbar_kwargs)
+        cb = fp.format_cbar(cb, cbar_title)
+        return fig, ax, cb
+    else:
+        return fig, ax, c
+

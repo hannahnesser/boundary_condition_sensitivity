@@ -188,12 +188,14 @@ labels = ['BC optimized', 'BC not optimized']
 for i, optimize_BC in enumerate([False]):#enumerate([True, False]):
     y_a = fm.forward_model(x_a, y_init, BC_t, t, U, L, obs_t)
     K_t = inv.build_jacobian(x_a, y_init, BC_t, t, U, L, obs_t, optimize_BC)
+    c_t = y_a.flatten() - K_t @ np.ones(K_t.shape[1])
     inv_inputs = [x_a, s_a_vec, y.flatten(), y_a.flatten(), s_o_vec, K_t]
     x_hat_t, s_hat, a_t, g_t = inv.solve_inversion(*inv_inputs, optimize_BC)
     y_hat_t = fm.forward_model(x_hat_t*x_a, y_init, BC_t, t, U, L, obs_t)
-    bw_base = inv.band_width(g_t*x_a.reshape(-1, 1)*3600*24)
+    # bw_base = inv.band_width(g_t*x_a.reshape(-1, 1)*3600*24)
     ils_base = inv.influence_length(g_t*x_a.reshape(-1, 1)*3600*24)
-    base = [bw_base, bw_base, ils_base, ils_base]
+    # base = [bw_base, bw_base, ils_base, ils_base]
+    base = [ils_base, ils_base]
 
     ax = plot.plot_emis(ax, x_hat_t*x_a, c=fp.color(6), ls=ls[i], marker='*',
                         markersize=10, label=f'Posterior ({labels[i]})')
@@ -398,10 +400,11 @@ fp.save_fig(fig, plot_dir, f'constant_BC_{BC_t:d}')
 ## -------------------------------------------------------------------------##
 # Oscillating boundary condition perturbations
 ## -------------------------------------------------------------------------##
-optimize_BC = True
+optimize_BC = False
 # Summary plot
 fig_perts, ax_perts = fp.get_figax(aspect=5)
 fig_summ, ax_summ = plot.format_plot(nstate)
+fig_scat, ax_scat = fp.get_figax(aspect=1)
 # # Add ~10% errors
 ax_summ.fill_between([0, nstate+1], 10, color='grey', alpha=0.2,
                      label=r'$\approx$ 10\% error')
@@ -420,10 +423,10 @@ BC6 = [1975, -100, 4, 0]
 BCs = [BC1, BC2, BC3, BC4, BC5, BC6]
 # BCs = [BC5]
 # BCs = [BC1]
-ls = ['--', '-']
+ls = ['-', '-']
 x_hat_diff_record = np.zeros((2, len(BCs), nstate))
 for i, BC_l in enumerate(BCs):
-    for j, optimize_BC in enumerate([True, False]):
+    for j, optimize_BC in enumerate([False]):#enumerate([True, False]):
     # for i, BC_l in enumerate([BC1]):
         n = len(BCs)
         BC = BC_l[0] + BC_l[1]*np.sin(BC_l[2]*2*np.pi/t.max()*t+BC_l[3])
@@ -446,9 +449,13 @@ for i, BC_l in enumerate(BCs):
         y_hat = fm.forward_model(x_hat*x_a, y_init, BC, t, U, L, obs_t)
 
         c = y_a.flatten() - K @ np.ones(K.shape[1])
-        print('-'*70)
-        print(np.abs(g.sum(axis=1))*x_a*3600*24)
-        print(c)
+        delta_c = c - c_t
+        x_hat_diff_pred = np.array(-(g*x_a.reshape((-1, 1))*3600*24) @ delta_c)
+
+
+        # print('-'*70)
+        # print(np.abs(g.sum(axis=1))*x_a*3600*24)
+        # print(c)
         c = c.reshape(y_a.shape)
         # print(c)
 
@@ -458,30 +465,6 @@ for i, BC_l in enumerate(BCs):
         if j == 0:
             ax_perts.plot(t/3600, BC, c=fp.color(i*2, lut=n*2), lw=2,
                           label=label)
-        # print(BC)
-        # if len(BCs) == 1:
-        #     for j, c_row in enumerate(c):
-        #         # print(c_row)
-        #         if (j == 0) or (j == (nstate - 1)):
-        #             jidx = j+1
-        #             ax_perts.plot(obs_t/3600, c_row, #s=0.5+0.5*j, alpha=0.5,
-        #                           c=fp.color(j*2, lut=c.shape[0]*2,
-        #                                         cmap='Blues_r'),
-        #                           lw=1, label=r'c(x$_{%d}$, t)' % jidx)
-        #         else:
-        #             ax_perts.plot(obs_t/3600, c_row, #s=0.5+0.5*j, alpha=0.5,
-        #                           c=fp.color(j*2, lut=c.shape[0]*2,
-        #                                         cmap='Blues_r'),
-        #                           lw=1)
-        #                              # lw=1-0.05*j,
-        #                          # alpha=1-0.05*j)
-
-        # for idx in range(9, 10):#, nstate+1):
-        #     BC_test = (BC_l[0]
-        #                + BC_l[1]*np.sin(BC_l[2]*2*np.pi/t.max()*(obs_t-idx*tau)))
-        #     ax_perts.plot(obs_t/3600, BC_test, lw=0.5, ls='--',
-        #                   c=fp.color(i*2, lut=n*2))
-        # print()
 
         # # Inversion plot
         # fig, ax = plot.plot_inversion(x_a, x_hat, x_t, x_hat_t,
@@ -499,8 +482,62 @@ for i, BC_l in enumerate(BCs):
         # fp.save_fig(fig, plot_dir, f'oscillating_BC_{(i+1)}_{optimize_BC}_obs_diff')
 
         # Summary plot
-        ax_summ.plot(xp, x_hat_diff, c=fp.color(i*2, lut=n*2), lw=2, ls=ls[j],
+        ax_summ.plot(xp, x_hat_diff, c=fp.color(i*2, lut=n*2), lw=1, ls=ls[j],
                      label=label)
+        # ax_summ.plot(xp, x_hat_diff_pred, c=fp.color(i*2, lut=n*2),
+        #              lw=3, ls='--')
+        # ax_summ.plot(xp, x_hat*x_a*3600*24, c=fp.color(i*2, lut=n*2),
+        #              lw=1, ls=':')
+
+        print('-'*30)
+        print(np.where(np.abs(g.sum(axis=1)*x_a*3600*24*100) > 10))
+        xx = (x_hat*x_a*3600*24)[:4].reshape((-1, 1))
+        gg = (g.sum(axis=1)*x_a*3600*24)[:4].reshape((-1, 1))
+        # m, b, r, bias = gc.comparison_stats(gg, xx)
+        m, _, _, _ = np.linalg.lstsq(gg, xx, rcond=None)
+        BC_err1 = -m[0][0]
+
+        m, _, _, _ = np.linalg.lstsq(xx, gg, rcond=None)
+        BC_err2 = -1/m[0][0]
+
+        m = gc.rma(gg, xx)
+        BC_err3 = -m
+
+        m = gc.rma_modified(gg, xx)
+        BC_err4 = -m
+
+        print('-'*50)
+        print(f'Predicted boundary condition error (RMA)         : {BC_err3:.1f}')
+        print(f'Predicted boundary condition error (RMA modified): {BC_err4:.1f}')
+        print(f'Predicted boundary condition error (LSQ, x vs. g): {BC_err1:.1f}')
+        print(f'Predicted boundary condition error (LSQ, g vs. x): {BC_err2:.1f}')
+        print('-'*50)
+
+        # ax_scat.scatter(xx, gg, color=fp.color(i*2, lut=n*2), label=label)
+        # ax_scat.scatter(xx, gg/m, color=fp.color(i*2, lut=n*2),
+        #                 s=25, marker='x')
+        ax_scat.scatter(xx, -BC_err1*gg, color=fp.color(i*2, lut=n*2),
+                        s=10, marker='o')
+        ax_scat.scatter(xx, -BC_err2*gg, color=fp.color(i*2, lut=n*2),
+                        s=10, marker='v')
+        ax_scat.scatter(xx, -BC_err3*gg, color=fp.color(i*2, lut=n*2),
+                        s=20, marker='x')
+        ax_scat.scatter(xx, -BC_err4*gg, color=fp.color(i*2, lut=n*2),
+                        s=20, marker='*')
+
+        ax_summ.plot(xp, np.abs(BC_err3*g.sum(axis=1)*x_a*3600*24),
+                     c=fp.color(i*2, lut=n*2), lw=1, ls='--')
+        # ax_summ.plot(xp,
+        #              np.abs(x_hat - (1/m)*g.sum(axis=1) - x_hat_t)*x_a*3600*24,
+        #              c=fp.color(i*2, lut=n*2), lw=1, ls=':')
+        ax_summ.plot(xp,
+                     np.abs(x_hat + BC_err3*g.sum(axis=1) - x_hat_t)*x_a*3600*24,
+                     c=fp.color(i*2, lut=n*2), lw=1, ls='-.')
+
+        # ax_summ.plot(xp, np.abs((1/m2)*g.sum(axis=1)*x_a*3600*24),
+        #              c=fp.color(i*2, lut=n*2), lw=1, ls=':')
+
+
 
 # styles = ['--', '-.', ':']
 # # colors = ['0', '0.2', '0.4']
@@ -549,6 +586,12 @@ fp.add_legend(ax_summ, handles=custom_lines, labels=custom_labels,
 
 # Save
 fp.save_fig(fig_summ, plot_dir, f'oscillating_BC_summary_{optimize_BC}')
+
+# Scatter plot
+fp.add_title(ax_scat, r'$\sum$G vs. $\hat{x}$')
+fp.add_labels(ax_scat, r'$\hat{x}$ (ppb/day)', r'$\sum$G (ppb/day)')
+fp.plot_one_to_one(ax_scat)
+fp.save_fig(fig_scat, plot_dir, f'scatter')
 
 # One last plot
 fig, ax = plot.format_plot(nstate)
