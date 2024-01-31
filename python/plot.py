@@ -2,21 +2,22 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.lines import Line2D
 import numpy as np
+import math
 
 import sys
 sys.path.append('.')
 import format_plots as fp
-import config
+import plot_settings as ps
 import inversion as inv
 
 ## -------------------------------------------------------------------------##
 # Define plotting functions
 ## -------------------------------------------------------------------------##
-def plot_inversion(x_a, x_hat, x_true, x_hat_true=None, s_a=None, a=None,
+def plot_inversion(xa, x_hat, x_true, xhat_true=None, sa=None, a=None,
                    optimize_BC=False, figax=None,
                    add_text=True, add_legend=True):
     # Set up plots
-    nstate = x_a.shape[0]
+    nstate = xa.shape[0]
     xp = np.arange(1, nstate+1)
     if figax is None:
         fig, ax = format_plot(nstate)
@@ -24,26 +25,26 @@ def plot_inversion(x_a, x_hat, x_true, x_hat_true=None, s_a=None, a=None,
         fig, ax = figax
 
     # Subset prior error
-    if optimize_BC and (s_a is not None):
-        s_a = s_a[:-1, :-1]
+    if optimize_BC and (sa is not None):
+        sa = sa[:-1, :-1]
 
     # Plot "true " emissions
     ax = plot_emis(ax, x_true, c=fp.color(2), ls='--', label='Truth')
 
     # Plot prior
-    ax = plot_emis(ax, x_a, s_a, c=fp.color(4), marker='.', markersize=10,
+    ax = plot_emis(ax, xa, sa, c=fp.color(4), marker='.', markersize=10,
                    label='Prior')
 
     # Plot posterior
-    if x_hat_true is not None:
-        ax = plot_emis(ax, x_hat*x_a, c=fp.color(8), marker='.', markersize=5,
+    if xhat_true is not None:
+        ax = plot_emis(ax, x_hat*xa, c=fp.color(8), marker='.', markersize=5,
                        lw=1, label='Posterior', zorder=10)
         ncol = 2
-    else: # if x_hat_true is none
-        x_hat_true = x_hat
+    else: # if xhat_true is none
+        xhat_true = x_hat
         ncol = 3
 
-    ax = plot_emis(ax, x_hat_true*x_a, c=fp.color(6), marker='*',
+    ax = plot_emis(ax, xhat_true*xa, c=fp.color(6), marker='*',
                markersize=10, label='True BC Posterior')
 
     if add_text:
@@ -61,13 +62,12 @@ def plot_emis(ax, emis, err=None, **kwargs):
     nstate = emis.shape[0]
     xp = np.arange(1, nstate+1)
     if err is None:
-        ax.plot(xp, 3600*24*emis, **kwargs)
+        ax.plot(xp, emis, **kwargs)
     else:
-        ax.errorbar(xp, 3600*24*emis, yerr=3600*24*np.diag(err)**0.5*emis,
+        ax.errorbar(xp, emis, yerr=np.diag(err)**0.5*emis,
                     **kwargs)
     ax.set_ylim(0, 200)
     return ax
-
 
 def plot_avker(ax, a, **kwargs):
     nstate = a.shape[0]
@@ -115,7 +115,7 @@ def plot_obs(nstate, y, y_a, y_ss, obs_t, optimize_BC):
 
     return fig, ax
 
-def plot_obs_diff(nstate, y, y_hat, y_a, obs_t, optimize_BC):
+def plot_obs_diff(nstate, y, yhat, y_a, obs_t, optimize_BC):
     # Plot observations
     fig, ax = format_plot(nstate)
 
@@ -134,7 +134,7 @@ def plot_obs_diff(nstate, y, y_hat, y_a, obs_t, optimize_BC):
                     c=fp.color(i+2, cmap='plasma', lut=nt + 2),
                     lw=0.5, ls='-')
 
-    y_diff = y - y_hat
+    y_diff = y - yhat
     for i, y_column in enumerate(y_diff.T):
         ax.plot(xp, y_column,
                 c=fp.color(i+2, cmap='viridis', lut=nt + 2),
@@ -149,10 +149,10 @@ def plot_obs_diff(nstate, y, y_hat, y_a, obs_t, optimize_BC):
 
     return fig, ax
 
-def plot_cost_func(x_hat, x_a, s_a_vec, y_hat, y, s_o_vec, obs_t,
+def plot_cost_func(x_hat, xa, sa_vec, yhat, y, s_o_vec, obs_t,
                    optimize_BC):
     # Plot observations
-    nstate = len(x_a)
+    nstate = len(xa)
     nobs = len(s_o_vec)
     fig, ax = format_plot(nstate)
     # ax2 = ax.twinx()
@@ -161,33 +161,23 @@ def plot_cost_func(x_hat, x_a, s_a_vec, y_hat, y, s_o_vec, obs_t,
     nt = len(obs_t)
 
     # Plot x component
-    x_diff = (x_hat - np.ones(nstate))**2/s_a_vec
+    x_diff = (x_hat - np.ones(nstate))**2/sa_vec
     ax.plot(xp, x_diff, c=fp.color(5), lw=2, ls='-', label=r'$J_A(\hat{x})$')
     #, color=fp.color(5))
     # ax.tick_params(axis='y', labelcolor=fp.color(5))
     # ax.set_ylim(0, 50) # x_diff.max()*1.1)
 
     # Plot y component
-    y_diff = ((y - y_hat)**2/s_o_vec.reshape(y.shape))#.sum(axis=1)
+    y_diff = ((y - yhat)**2/s_o_vec.reshape(y.shape))#.sum(axis=1)
     ax.plot(xp, y_diff.sum(axis=1), c=fp.color(2), lw=2, ls='-',
             label=r'$J_O(\hat{x})$')
-    # for i, y_column in enumerate(y_diff.T):
-    #     ax.plot(xp, y_column, c=fp.color(2), lw=0.5, ls='--')
-
-
-    # y_diff = (y - y_a)**2/s_o_vec.reshape(y.shape)/nobs
-    # ax2.plot(xp, y_diff.sum(axis=1), c=fp.color(2), lw=2, ls='--')
-
-    # ax2 = fp.add_labels(ax2, '', r'$J_O(\hat{x})$', color=fp.color(2))
-    # ax2.tick_params(axis='y', labelcolor=fp.color(2))
-    # ax2.set_ylim(0, y_diff.sum(axis=1).max()*1.1)
 
     # Aesthetics
     add_text_label(ax, optimize_BC)
     ax = fp.add_labels(ax, '', r'$J(\hat{x})$')
     ax.set_xlabel('State Vector Element',
-                  fontsize=config.LABEL_FONTSIZE*config.SCALE,
-                  labelpad=config.LABEL_PAD, color='black')
+                  fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+                  labelpad=ps.LABEL_PAD, color='black')
     ax = fp.add_legend(ax, bbox_to_anchor=(0.5, -0.45), loc='upper center',
                        ncol=2)
     ax.set_ylim(0, 30)
@@ -195,18 +185,35 @@ def plot_cost_func(x_hat, x_a, s_a_vec, y_hat, y, s_o_vec, obs_t,
 
     return fig, ax
 
-def format_plot(nstate, nplots=1, **fig_kwargs):
-    fig, ax = fp.get_figax(aspect=4 - 0.65*(nplots-1), cols=1, rows=nplots,
-                           **fig_kwargs)
-    if nplots == 1:
+def format_plot(fig, ax, nstate, **fig_kwargs):
+    # Deal with difference in axis shapes
+    if type(ax) == np.ndarray:
+        if len(ax.shape) == 1:
+            ncols = 1
+        else:
+            ncols = ax.shape[1]
+    else:
+        ncols = 1
         ax = [ax]
+
+    # Formatting
     for axis in ax:
         for i in range(nstate+2):
-            axis.axvline(i-0.5, c=fp.color(1), alpha=0.2, ls=':')
+            # ncols = 1 --> lw = 1      1 - 0*0.25
+            # ncols = 2 --> lw = 0.75   1 - math.log2(2)*0.25
+            # ncols = 4 --> lw = 0.5    1 - math.log2(4)*0.25
+            # ncols = 8 --> lw = 0.25   1 - math.log2(8)*0.25
+            axis.axvline(i-0.5, c=fp.color(1), alpha=0.2, ls=':', 
+                         lw=1-math.log2(ncols)*0.25)
         axis.set_xticks(np.arange(0, nstate+1, 2))
         axis.set_xlim(0.5, nstate+0.5)
         axis.set_facecolor('white')
-    if nplots == 1:
+
+        # Adjust aspect
+        xs = axis.get_xlim()
+        ys = axis.get_ylim()
+        axis.set_aspect(0.25*(xs[1]-xs[0])/(ys[1]-ys[0]), adjustable='box')
+    if len(ax) == 1:
         return fig, ax[0]
     else:
         return fig, ax
@@ -218,12 +225,11 @@ def add_text_label(ax, optimize_BC):
         txt = 'BC not optimized'
     # txt = txt + f'\nn = {nstate}\nm = {nobs}\nU = {(U*3600)}'
     ax.text(0.98, 0.95, txt, ha='right', va='top',
-                 fontsize=config.LABEL_FONTSIZE*config.SCALE,
+                 fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
                  transform=ax.transAxes)
 
 ## -------------------------------------------------------------------------##
 # Define Permian plotting functions
-## -------------------------------------------------------------------------##
 ## -------------------------------------------------------------------------##
 def plot_state(data, clusters_plot, default_value=0, cbar=True,
                category=None, time=None, category_list=None,
@@ -327,4 +333,151 @@ def plot_state_format(data, default_value=0, cbar=True, **kw):
         return fig, ax, cb
     else:
         return fig, ax, c
+
+
+## -------------------------------------------------------------------------##
+## Plotting functions : comparison
+## -------------------------------------------------------------------------##
+def add_stats_text(ax, r, bias):
+    if r**2 <= 0.99:
+        ax.text(0.05, 0.9, r'R = %.2f' % r,
+                fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+                transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.9, r'R $>$ 0.99',
+                fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+                transform=ax.transAxes)
+    ax.text(0.05, 0.875, 'Bias = %.2f' % bias,
+            fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+            transform=ax.transAxes,
+            va='top')
+    return ax
+
+def plot_comparison_hexbin(xdata, ydata, cbar, stats, **kw):
+    cbar_kwargs = kw.pop('cbar_kwargs', {})
+    fig_kwargs = kw.pop('fig_kwargs', {})
+    lims = kw.pop('lims', None)
+    fig, ax = fp.get_figax(**fig_kwargs)
+    ax.set_aspect('equal')
+
+    # Get data limits
+    xlim, ylim, xy, dmin, dmax = fp.get_square_limits(xdata, ydata, lims=lims)
+
+    # Set bins and gridsize for hexbin
+    if ('vmin' not in kw) or ('vmax' not in kw):
+        bin_max = len(xdata)*0.1
+        round_by = len(str(len(xdata)/10).split('.')[0]) - 1
+        bin_max = 1+int(round(bin_max, -round_by))
+        kw['bins'] = np.arange(0, bin_max)
+    kw['gridsize'] = math.floor((dmax - dmin)/(xy[1] - xy[0])*40)
+
+    # Plot hexbin
+    c = ax.hexbin(xdata, ydata, cmap=fp.cmap_trans('plasma_r'), **kw)
+
+    # Aesthetics
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+    # Print information about R2 on the plot
+    if stats:
+        _, _, r, bias = comparison_stats(xdata, ydata)
+        ax = add_stats_text(ax, r, bias)
+
+    if cbar:
+        cbar_title = cbar_kwargs.pop('title', '')
+        cax = fp.add_cax(fig, ax)
+        cbar = fig.colorbar(c, cax=cax, **cbar_kwargs)
+        cbar = fp.format_cbar(cbar, cbar_title)
+        return fig, ax, cbar
+    else:
+        return fig, ax, c
+
+def plot_comparison_scatter(xdata, ydata, stats, **kw):
+    fig_kwargs = kw.pop('fig_kwargs', {})
+    lims = kw.pop('lims', None)
+
+    fig, ax = fp.get_figax(**fig_kwargs)
+    ax.set_aspect('equal')
+
+    # Get data limits
+    xlim, ylim, xy, dmin, dmax = fp.get_square_limits(xdata, ydata, lims=lims)
+
+    # Plot hexbin
+    kw['color'] = kw.pop('color', fp.color(4))
+    kw['s'] = kw.pop('s', 3)
+    c = ax.scatter(xdata, ydata, **kw)
+
+    # Aesthetics
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+    # Print information about R2 on the plot
+    if stats:
+        _, _, r, bias = comparison_stats(xdata, ydata)
+        ax = add_stats_text(ax, r, bias)
+
+    return fig, ax, c
+
+def plot_comparison_dict(xdata, ydata, **kw):
+    fig_kwargs = kw.pop('fig_kwargs', {})
+    fig, ax = fp.get_figax(**fig_kwargs)
+    ax.set_aspect('equal')
+
+    # We need to know how many data sets were passed
+    n = len(ydata)
+    cmap = kw.pop('cmap', 'inferno')
+
+    # Plot data
+    count = 0
+    for k, ydata in ydata.items():
+        ax.scatter(xdata, ydata, alpha=0.5, s=5*ps.SCALE,
+                   c=color(count, cmap=cmap, lut=n))
+        count += 1
+
+    # Color bar (always True)
+    cax = fp.add_cax(fig, ax)
+    cbar_ticklabels = kw.pop('cbar_ticklabels', list(ydata.keys()))
+    norm = colors.Normalize(vmin=0, vmax=n)
+    cbar = colorbar.ColorbarBase(cax, cmap=plt.cm.get_cmap(cmap, lut=n),
+                                 norm=norm)
+    cbar.set_ticks(0.5 + np.arange(0,n+1))
+    cbar.set_ticklabels(cbar_ticklabels)
+    cbar = format_cbar(cbar)
+
+    return fig, ax, cbar
+
+def plot_comparison(xdata, ydata, cbar=True, stats=True, hexbin=True, **kw):
+    # Get other plot labels
+    xlabel = kw.pop('xlabel', '')
+    ylabel = kw.pop('ylabel', '')
+    label_kwargs = kw.pop('label_kwargs', {})
+    title = kw.pop('title', '')
+    title_kwargs = kw.pop('title_kwargs', {})
+
+    if type(ydata) == dict:
+        fig, ax, c = plot_comparison_dict(xdata, ydata, **kw)
+    elif hexbin:
+        fig, ax, c = plot_comparison_hexbin(xdata, ydata, cbar, stats, **kw)
+    else:
+        fig, ax, c = plot_comparison_scatter(xdata, ydata, stats, **kw)
+
+    # Aesthetics
+    ax = plot_one_to_one(ax)
+    ax = fp.add_labels(ax, xlabel, ylabel, **label_kwargs)
+    ax = fp.add_title(ax, title, **title_kwargs)
+
+    # Make sure we have the same ticks
+    # ax.set_yticks(ax.get_xticks(minor=False), minor=False)
+    ax.set_xticks(ax.get_yticks(minor=False), minor=False)
+    ax.set_xlim(ax.get_ylim())
+
+    return fig, ax, c
+
+
+def plot_one_to_one(ax):
+    xlim, ylim, _, _, _ = get_square_limits(ax.get_xlim(),
+                                            ax.get_ylim())
+    ax.plot(xlim, xlim, c='0.1', lw=2, ls=':',
+            alpha=0.5, zorder=0)
+    return ax
 

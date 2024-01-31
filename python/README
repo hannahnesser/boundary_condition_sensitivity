@@ -1,0 +1,12 @@
+# Notes on the project
+
+Scripts in python/
+1. basic.py
+   This script plots the base inversion variables (true emissions, prior emissions, and observations) and the posterior solution (posterior emissions and relative error compared to the truth) assuming that the solution is known. 
+
+   ## Modify the observational errror
+# s.so_vec[:1*s.nobs_per_cell] = 15*np.sqrt(10)
+# s.so_vec[1*s.nobs_per_cell:2*s.nobs_per_cell] = 30
+# s.so_vec[2*s.nobs_per_cell:3*s.nobs_per_cell] = 30
+# s.so_vec[3*s.nobs_per_cell:4*s.nobs_per_cell] = 30
+# s.so_vec[4*s.nobs_per_cell:5*s.nobs_per_cell] = 30

@@ -13,10 +13,10 @@ import gcpy as gc
 import forward_model as fm
 import inversion as inv
 import plot
-import config
-config.SCALE = config.PRES_SCALE
-config.BASE_WIDTH = config.PRES_WIDTH
-config.BASE_HEIGHT = config.PRES_HEIGHT
+import plot_settings as ps
+ps.SCALE = ps.PRES_SCALE
+ps.BASE_WIDTH = ps.PRES_WIDTH
+ps.BASE_HEIGHT = ps.PRES_HEIGHT
 import format_plots as fp
 
 np.set_printoptions(precision=3, linewidth=300, suppress=True)
@@ -133,7 +133,7 @@ if print_summary:
 # Create initial plots
 ## -------------------------------------------------------------------------##
 # Prior
-fig, ax = plot.format_plot(nstate, nplots=2, sharex=True)
+fig, ax = plot.format_plot(nstate, nrows=2, sharex=True)
 fp.add_title(ax[0], 'Base inversion variables')
 xp = np.arange(1, nstate+1) # plotting x coordinates
 
@@ -179,7 +179,7 @@ fp.save_fig(fig, plot_dir, f'prior_obs')
 ## -------------------------------------------------------------------------##
 # Inversion plots
 xp = np.arange(1, nstate+1)
-fig, ax = plot.format_plot(nstate, 2, sharex=True)
+fig, ax = plot.format_plot(nstate, nrows=2, sharex=True)
 ax[0] = plot.plot_emis(ax[0], x_t, c=fp.color(2), ls='--', label='Truth')
 ax[0] = plot.plot_emis(ax[0], x_a, c=fp.color(4), marker='.',
                        markersize=10, label='Prior')

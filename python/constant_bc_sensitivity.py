@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from copy import deepcopy as dc
 import os
 import matplotlib.pyplot as plt
@@ -10,14 +11,12 @@ import sys
 sys.path.append('.')
 import settings as s
 import gcpy as gc
-# import forward_model as fm
-# import inversion as inv
-import inversion_new as inv
+import inversion as inv
 import plot
-import config
-config.SCALE = config.PRES_SCALE
-config.BASE_WIDTH = config.PRES_WIDTH
-config.BASE_HEIGHT = config.PRES_HEIGHT
+import plot_settings as ps
+ps.SCALE = ps.PRES_SCALE
+ps.BASE_WIDTH = ps.PRES_WIDTH
+ps.BASE_HEIGHT = ps.PRES_HEIGHT
 import format_plots as fp
 
 rcParams['text.usetex'] = True
@@ -36,208 +35,225 @@ if not os.path.exists(plot_dir):
 ## -------------------------------------------------------------------------##
 # Default is opt_BC = False
 true_BC = inv.Inversion()
-
-x_abs_t_sf = dc(s.x_abs_t)
-x_abs_t_sf[0] *= 5
-xa_abs_sf = dc(s.xa_abs)
-xa_abs_sf[0] *= 5
-pert_xa = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf)
-
-sa_sf = dc(true_BC.sa)
-sa_sf[0] *= 5
-pert_sa = inv.Inversion(sa=sa_sf)
+print(true_BC.t)
+print(true_BC.obs_t)
 
 ## -------------------------------------------------------------------------##
-# Constant boundary condition perturbations
+# ILS sensitivity perturbations
 ## -------------------------------------------------------------------------##
-# Define the constant perturbations to the boundary condition
-perts = [10, 25, 50]
-opt_BC = False
+fig_ils, ax_ils = fp.get_figax(rows=1, cols=3, aspect=1, 
+                               sharex=False, sharey=True)
+plt.subplots_adjust(wspace=0.1, hspace=0.5)
 
-# Initialize a summary figure
-fig_summ, ax_summ = fp.get_figax()
-fig_ils, ax_ils = fp.get_figax(aspect=1)
+fig_summ, ax_summ = fp.get_figax(rows=3, cols=1, aspect=3,
+                                 # width_ratios=[0.25, 1, 1],
+                                 sharex=True, sharey='col')
+plt.subplots_adjust(wspace=0.5, hspace=0.5)
+ax_summ[0].set_ylim(0, 1.05)
+ax_summ_t = [ax_summ[i].twinx() for i in range(3)]
 
+fig_bc, ax_bc = fp.get_figax(rows=1, cols=3, aspect=1, sharey=True)
+plt.subplots_adjust(wspace=0.1, hspace=0.1)
+
+# ils_sensi = pd.DataFrame(columns=np.arange(1, 10))
+
+# BC perturbations
+perts = np.arange(5, 55, 10)
+BC_ils = []
 for i, pert in enumerate(perts):
     pert_BC = inv.Inversion(BC=true_BC.BC_t + pert)
+    BC_ils.append(pert_BC.ils)
+    ax_summ[0].plot(pert_BC.xp, 
+                    np.abs(pert_BC.xhat - true_BC.xhat)/true_BC.xhat,
+                    color=fp.color(2*i, lut=10), lw=2,
+                    label=f'{pert} ppb')
+    ax_summ_t[0].plot(pert_BC.xp, pert_BC.xa_contrib/pert_BC.tot_correct,
+                  color=fp.color(2*i, lut=10), ls='--', lw=2)
 
-    xa_contrib = pert_BC.a @ pert_BC.xa
-    bc_contrib = pert_BC.g @ pert_BC.c
 
-    # Summary plot
-    ax_summ.plot(s.xp, np.abs(pert_BC.xhat - true_BC.xhat), 
-                 c=fp.color(k=4*i), lw=1, ls='-',
-                 label=f'+/-{pert:d} ppb')
-    # ax_summ.plot(s.xp, np.abs(-pert*g.sum(axis=1)), 
-    #              c=fp.color(k=4*i), lw=2, ls='--')
+    # t = true_BC.x_abs_t/true_BC.xa_abs
+    # ax_summ[0, 1].plot(
+    #     c.xp, 
+    #     np.abs(pert_BC.xhat - t)/t,
+    #     color=fp.color(2*i, lut=10), lw=2)
+    # # ax_summ[0, 1].plot(
+    # #     c.xp, pert_BC.xa_contrib/pert_BC.tot_correct,
+    # #     color=fp.color(2*i, lut=10), ls='--', lw=2)
 
-    ax_ils.plot(bc_contrib/(xa_contrib + bc_contrib), 
-                np.abs(pert_BC.xhat - true_BC.xhat)/true_BC.xhat,
-                c=fp.color(k=4*i), marker='o', 
-                label=f'+/-{pert:d} ppb')
+    ax_bc[0].plot(pert_BC.bc_contrib/pert_BC.tot_correct, 
+                  np.abs(pert_BC.xhat - true_BC.xhat)/true_BC.xhat,
+                  color=fp.color(2*i, lut=10), lw=0.5, ms=5, marker='o')
 
-    # Solve inversion with xa_abs_sf
-    pert_xa_BC = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf, 
-                                BC=true_BC.BC_t + pert)
-    xa_contrib = pert_xa_BC.a @ pert_xa_BC.xa
-    bc_contrib = pert_xa_BC.g @ pert_xa_BC.c
+fp.add_title(ax_bc[0], 'Boundary\ncondition\nperturbations')
+ax_bc[0].axvline(0.5, color='0.6', ls='--')
+ax_bc[0].axhline(0.1, color='0.6', ls='--')
 
-    # ax_summ.plot(s.xp, np.abs(pert_xa_BC.xhat - pert_xa.xhat)/pert_xa.xhat, 
-    #              c=fp.color(k=4*i), lw=1, ls=':',
-    #              label=r'x$_{A, 0}$ scaled')
-    # ax_ils.plot(bc_contrib/(xa_contrib + bc_contrib), 
-    #             np.abs(pert_xa_BC.xhat - pert_xa.xhat)/pert_xa.xhat,
-    #             c=fp.color(k=4*i), marker='o', ls=':',
-    #             markeredgecolor=fp.color(k=4*i), markerfacecolor='white',
-    #             label=r'x$_{A, 0}$ scaled')
+# ax_summ[0].set_xlabel('Rela')
 
-# Add ~10% errors
-ax_summ.fill_between([0, s.nstate+1], 0.1, color='grey', alpha=0.2,
-                     label=r'$\approx$ 10\% error')
+# ax_summ[0].set_ylabel()
+ax_ils[0].scatter(perts, BC_ils, color=fp.color(4), s=5)
+ax_ils[0].set_xlim(perts.min() - 0.5, perts.max() + 0.5)
 
-# Add text
-fp.add_title(ax_summ, 'Constant Boundary Condition Perturbations')
-plot.add_text_label(ax_summ, False)
-fp.add_labels(ax_summ, 'State vector element',
-              r'$\vert\Delta\hat{x}\vert$ (unitless)')
+fp.add_title(ax_summ[0], 'Boundary condition perturbations')
+fp.add_legend(ax_summ[0], bbox_to_anchor=(1.15, 0.5), loc='center left')
 
-ax_summ.set_ylim(0, 1)
-fig_summ, ax_summ = plot.format_plot(fig_summ, ax_summ, s.nstate)
-# ax_summ.set_yscale('log')
-# ax_summ.set_ylim(1e-18, 10)
-# xs = ax_summ.get_xlim()
-# ys = ax_summ.get_ylim()
-# ax_summ.set_aspect(0.25, adjustable='box')
+# Scale U
+us = 24*np.arange(1, 11, 2)
+U_ils = []
+for i, u in enumerate(us):
+    cc = fp.color(2*i, lut=10)
+    true_U = inv.Inversion(U=u)
+    pert_U = inv.Inversion(U=u, BC=true_BC.BC_t + 10)
+    U_ils.append(true_U.ils)
+    ax_summ[1].plot(pert_U.xp, np.abs(pert_U.xhat - true_U.xhat)/true_U.xhat, 
+                    color=cc, lw=2, label=f'{(pert_U.L/u):.1f} day')
+    ax_summ_t[1].plot(pert_U.xp, pert_U.xa_contrib/pert_U.tot_correct,
+                      color=cc, ls='--', lw=2)
 
-# Legend for summary plot
-custom_lines = [Line2D([0], [0], color='grey', lw=1, ls='-'),
-                Line2D([0], [0], color='grey', lw=2, ls='--'),
-                Line2D([0], [0], color='grey', lw=1, ls=':')]
-custom_labels = ['Numerical solution', 'Predicted solution', 
-                 'Exponential decay']
-handles, labels = ax_summ.get_legend_handles_labels()
-custom_lines.extend(handles)
-custom_labels.extend(labels)
-fp.add_legend(ax_summ, handles=custom_lines, labels=custom_labels,
-              bbox_to_anchor=(0.5, -0.45), loc='upper center', ncol=3)
+    # t = true_U.x_abs_t/true_U.xa_abs
+    # ax_summ[1, 1].plot(
+    #     c.xp, 
+    #     np.abs(pert_U.xhat - t)/t,
+    #     color=cc, lw=2)
+    # # ax_summ[1, 1].plot(
+    # #     c.xp, pert_U.xa_contrib/pert_U.tot_correct,
+    # #     color=cc, ls='--', lw=2)
 
-# Set limits
-# ax_summ.set_ylim(0, 0.2)
 
-ax_ils.axhline(0.1, color='grey', ls='--', label=r'$\approx$ 10\% errors')
-ax_ils.axvline(0.5, color='grey', ls='--', label=r'50\% BC contribution')
+    ax_bc[1].plot(pert_U.bc_contrib/pert_U.tot_correct, 
+                     np.abs(pert_U.xhat - true_U.xhat)/true_U.xhat,
+                     color=cc, lw=0.5, ms=5, marker='o')
 
-ax_ils.set_yscale('log')
-ax_ils.set_ylim(1e-5, 10)
-# ax_ils.set_ylim(-0.1, 1)
-fp.add_labels(ax_ils,
-              'Relative contribution of BC\nto posterior correction',
-               r'$\vert\Delta\hat{x}\vert$ (unitless)')
-fp.add_legend(ax_ils)
 
-# Save plot
-fp.save_fig(fig_summ, plot_dir, f'constant_BC_summary')
-fp.save_fig(fig_ils, plot_dir, f'constant_BC_vs_ILS')
-plt.close()
+fp.add_title(ax_bc[1], 'Residence time\nchanges')
+ax_bc[1].axvline(0.5, color='0.6', ls='--')
+ax_bc[1].axhline(0.1, color='0.6', ls='--')
 
-## -------------------------------------------------------------------------##
-# Plot gain matrix for a number of So vectors
-## -------------------------------------------------------------------------##
-# # Set up scaling factor range
-# xx = np.arange(-1.5, 1.51, 0.01)
-# lls = [':', '--', '-']
-# yaxis = ['Gain matrix band width', 'Influence length scale']
-# ylim = [(0, 1.1), (0, 1.1), (-0.5, 10.5), (-0.5, 10.5)]
-# fig_summ, ax_summ = fp.get_figax(aspect=2, rows=2, cols=2,
-#                                  sharex='all', sharey='row')
+ax_ils[1].scatter(true_U.L/us, U_ils, color=fp.color(4), s=5)
+ax_ils[1].set_xlim(true_U.L/us.max() - 0.5, true_U.L/us.min() + 0.5)
 
-# # Iterate through courant numbers
-# for j, c in enumerate([0.1, 0.5, 1]):
-#     delta_t = c*s.L/s.U
-#     t = np.arange(0, s.init_t + s.total_t + delta_t, delta_t)
-#     ya = fm.forward_model(s.xa_abs, s.y0, s.BC_t, t, s.U, s.L, s.obs_t)
-#     k = fm.build_jacobian(s.xa_abs, s.y0, s.BC_t, t, s.U, s.L, s.obs_t,
-#                           opt_BC=opt_BC)
+fp.add_title(ax_summ[1], 'Changing residence time')
+fp.add_legend(ax_summ[1], bbox_to_anchor=(1.15, 0.5), loc='center left')
 
-#     # Initialize arrays
-#     sa_effect = np.zeros((len(xx), 4))
-#     so_effect = np.zeros((len(xx), 4))
-#     xa_effect = np.zeros((len(xx), 4))
+# # xa_abs[0] scaling
+sfs = np.array([1, 2, 3, 4, 5])
+# xa_abs_ils =[]
+# for i, sf in enumerate(sfs):
+#     # x_abs_t_sf = dc(true_BC.x_abs_t)
+#     # x_abs_t_sf[0] *= sf
+#     xa_abs_sf = dc(true_BC.xa_abs)
+#     xa_abs_sf[0] *= sf
+#     # pert_xa = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf)
+#     # pert_xa_BC = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf,
+#     #                            BC=true_BC.BC_t + 10)
+#     pert_xa = inv.Inversion(xa_abs=xa_abs_sf)
+#     pert_xa_BC = inv.Inversion(xa_abs=xa_abs_sf, BC=true_BC.BC_t + 10)
+#     xa_abs_ils.append(pert_xa.ils)
+#     ax_summ[2, 0].plot(c.xp, 
+#                        np.abs(pert_xa_BC.xhat - pert_xa.xhat)/pert_xa.xhat, 
+#                        color=fp.color(2*i, lut=10), lw=2)
+#     ax_summ[2, 0].plot(c.xp, pert_xa_BC.xa_contrib/pert_xa_BC.tot_correct,
+#                        color=fp.color(2*i, lut=10), ls='--', lw=2)
 
-#     # Iterate through scaling factors
-#     for i, x in enumerate(xx):
-#         # Alter Sa (full vector)
-#         sa = (10**(2*x))*dc(s.sa_vec[opt_BC])
-#         xhat, _, _, g = inv.solve_inversion(sa_vec=sa, k=k, ya=ya, 
-#                                             opt_BC=opt_BC)
-#         sa_effect[i, 0] = inv.band_width(g)
-#         sa_effect[i, 2] = inv.e_folding_length(g)
+#     t = true_BC.x_abs_t/true_BC.xa_abs
+#     ax_summ[2, 1].plot(
+#         c.xp, 
+#         np.abs(pert_xa_BC.xhat - t)/t,
+#         color=fp.color(2*i, lut=10), lw=2)
+#     ax_summ[2, 1].plot(
+#         c.xp, pert_xa_BC.xa_contrib/pert_xa_BC.tot_correct,
+#         color=fp.color(2*i, lut=10), ls='--', lw=2)
 
-#         # Alter Sa (first n grid cells)
-#         sa = dc(s.sa_vec[opt_BC])
-#         sa[:(ils_t+1)] *= (10**(2*x))
-#         xhat, _, _, g = inv.solve_inversion(sa_vec=sa, k=k, ya=ya, 
-#                                             opt_BC=opt_BC)
-#         sa_effect[i, 1] = inv.band_width(g)
-#         sa_effect[i, 3] = inv.e_folding_length(g)
 
-#         # Alter So
-#         so = (10**(2*x))*dc(s.so_vec)
-#         xhat, _, _, g = inv.solve_inversion(so_vec=so, k=k, ya=ya, 
-#                                             opt_BC=opt_BC)
-#         so_effect[i, 0] = inv.band_width(g)
-#         so_effect[i, 2] = inv.e_folding_length(g)
+#     ax_bc[1, 0].plot(pert_xa_BC.bc_contrib/pert_xa_BC.tot_correct, 
+#                      np.abs(pert_xa_BC.xhat - pert_xa.xhat)/pert_xa.xhat,
+#                      color=fp.color(2*i, lut=10), lw=0.5, ms=5, marker='o')
 
-#         so = dc(s.so_vec)
-#         so[:(ils_t+1)*s.nobs_per_cell] *= (10**(2*x))
-#         xhat, _, _, g = inv.solve_inversion(so_vec=so, k=k, ya=ya, 
-#                                             opt_BC=opt_BC)
-#         # print(np.abs(g.sum(axis=1))*1e3)
-#         so_effect[i, 1] = inv.band_width(g)
-#         so_effect[i, 3] = inv.e_folding_length(g)
+# ax_bc[1, 0].text(0.05, 0.95, r'$x_{A,0}$ scaling',  va='top',
+#                  fontsize=c.LABEL_FONTSIZE*c.SCALE,
+#                  transform=ax_bc[1, 0].transAxes)
+# ax_bc[1, 0].axvline(0.5, color='0.6', ls='--')
+# ax_bc[1, 0].axhline(0.1, color='0.6', ls='--')
 
-#         # Alter xa
-#         xa_abs = dc(s.xa_abs)
-#         xa_abs[:(ils_t+1)] *= (10**x)
-#         k_xa = dc(k)
-#         k_xa *= xa_abs/s.xa_abs
-#         ya_xa = fm.forward_model(xa_abs, s.y0, s.BC_t, t, s.U, s.L, s.obs_t)
-#         xhat, _, _, g = inv.solve_inversion(k=k_xa, ya=ya_xa, 
-#                                             opt_BC=opt_BC)
-#         xa_effect[i, 1] = inv.band_width(g)
-#         xa_effect[i, 3] = inv.e_folding_length(g)
 
-#     # Plotting
-#     # plt.subplots_adjust(wspace=0.5)
-#     # We want 0 and 1 to --> 1 and 2 and 3 --> 2
-#     for h, ax in enumerate(ax_summ.flatten()):
-#         # ax.scatter(1, base[i], c='grey', zorder=10, label='Base inversion')
-#         ax.plot(10**xx, sa_effect[:, h], c=fp.color(8), ls=lls[j], 
-#                 label='Prior error')
-#         ax.plot(10**xx, so_effect[:, h], c=fp.color(5), ls=lls[j], 
-#                 label='Observational error')
-#         if h in [1, 3]:
-#             ax.plot(10**xx, xa_effect[:, h], c=fp.color(2), ls=lls[j], 
-#                     label='Prior')
-#         ax.set_ylim(ylim[h])
-#         ax.set_xscale('log')
+# ax_ils[1, 0].scatter(sfs, xa_abs_ils, color=fp.color(4), s=5)
+# ax_ils[1, 0].set_xlim(sfs.min() - 0.5, sfs.max() + 0.5)
 
-# # Titles
-# ax_summ[0, 0] = fp.add_title(ax_summ[0, 0], 'Full domain scaled')
-# ax_summ[0, 1] = fp.add_title(ax_summ[0, 1], 'First grid cell scaled')
+# Sa_abs scaling
+sa_ils =[]
+for i, sf in enumerate(sfs):
+    sa_sf = dc(true_BC.sa)
+    sa_sf[0] *= sf**2
+    pert_sa = inv.Inversion(sa=sa_sf)
+    pert_sa_BC = inv.Inversion(sa=sa_sf, BC=true_BC.BC_t + 10)
+    sa_ils.append(pert_sa.ils)
+    ax_summ[2].plot(pert_sa_BC.xp, 
+                    np.abs(pert_sa_BC.xhat - true_BC.xhat)/true_BC.xhat, 
+                    color=fp.color(2*i, lut=10), lw=2, label=f'{sf}')
+    ax_summ_t[2].plot(pert_sa_BC.xp, 
+                      pert_sa_BC.xa_contrib/pert_sa_BC.tot_correct,
+                      color=fp.color(2*i, lut=10), ls='--', lw=2)
 
-# # Axis labels
-# ax_summ[0, 0] = fp.add_labels(ax_summ[0, 0], '', 'Gain matrix\nband width')
-# ax_summ[0, 1] = fp.add_labels(ax_summ[0, 1], '', '')
-# ax_summ[1, 0] = fp.add_labels(ax_summ[1, 0], 'Scale factor',
-#                               'Influence\nlength scale')
-# ax_summ[1, 1] = fp.add_labels(ax_summ[1, 1], 'Scale factor', '')
+    ax_bc[2].plot(pert_sa_BC.bc_contrib/pert_sa_BC.tot_correct, 
+                  np.abs(pert_sa_BC.xhat - true_BC.xhat)/true_BC.xhat,
+                  color=fp.color(2*i, lut=10), lw=0.5, ms=5, marker='o')
 
-# # Legend
-# handles_0, labels_0 = ax_summ[0, 0].get_legend_handles_labels()
-# ax_summ[0, 0] = fp.add_legend(ax_summ[0, 0], handles=handles_0, labels=labels_0,
-#                            bbox_to_anchor=(0.5, -0.1),
-#                            loc='upper center', ncol=4,
-#                            bbox_transform=fig_summ.transFigure)
+ax_ils[2].scatter(sfs, sa_ils, color=fp.color(4), s=5)
+ax_ils[2].set_xlim(sfs.min() - 0.5, sfs.max() + 0.5)
 
-# fp.save_fig(fig_summ, plot_dir, f'g_summary')
+fp.add_title(ax_bc[2], r'$\sigma_{A,0}$ scaling')
+ax_bc[2].axvline(0.5, color='0.6', ls='--')
+ax_bc[2].axhline(0.1, color='0.6', ls='--')
+
+fp.add_title(ax_summ[2], r'Scaling $\sigma_{A,0}$')
+fp.add_legend(ax_summ[2], bbox_to_anchor=(1.15, 0.5), loc='center left')
+
+# # Formatting ax_summ
+# for i in range(3):
+#     fp.add_labels(ax_summ[i, 0], '', '')
+# # for ax in ax_summ.flatten():
+# #     ax = fp.format_
+for i in range(3):
+    ax_summ[i].set_xticks(np.arange(0, s.nstate+1, 5))
+    ax_summ[i].set_xlim(0.5, s.nstate + 0.5)
+    ax_summ_t[i].set_ylim(0, 1.05)
+    for k in range(21):
+        ax_summ[i].axvline(k + 0.5, c=fp.color(1), alpha=0.2,
+                            ls=':', lw=0.5)
+    if i == 2:
+        xlabel = 'State vector element'
+    else:
+        xlabel = ''
+
+    fp.add_labels(ax_summ[i], xlabel, r'$\Delta x$')
+        # r'$\frac{\vert\hat{x} - \hat{x}_{T}\vert}{\hat{x}_{T}}$')
+    # fp.add_labels(
+    #     ax_summ[i, 1],
+    #     x    r'$\frac{\vert\hat{x} - x_{T}\vert}{x_{T}}$')
+
+    fp.add_labels(ax_summ_t[i], '', r'$\zeta^{-1}$')
+
+# Formatting ax_ils
+ax_ils[2].set_yticks(np.arange(0, 10))
+ax_ils[2].set_ylim(0.5, 9.5)
+fp.add_labels(ax_ils[0], 'Constant boundary\ncondition perturbation',
+              'Influence length scale', labelpad=10)
+fp.add_labels(ax_ils[1], 'Residence time', '', labelpad=10)
+# fp.add_labels(ax_ils[1, 0], 'Scale factor applied\nto 'r'x$_{A,0}$',
+#               'Influence length scale', labelpad=10)
+fp.add_labels(ax_ils[2], 'Scale factor applied\nto 'r'$\sigma_{A,0}$', '', 
+              labelpad=10)
+
+# Formatting ax_bc
+fp.add_labels(ax_bc[0], r'$\zeta$', r'$\Delta \hat{x}$')
+fp.add_labels(ax_bc[1], r'$\zeta$', '')
+fp.add_labels(ax_bc[2], r'$\Wind speed', '')
+fp.save_fig(fig_ils, plot_dir, f'constant_BC_ILS')
+
+fp.save_fig(fig_summ, plot_dir, f'constant_BC_sv')
+
+# Formatting ax_bc
+ax_bc[0].set_yscale('log')
+for ax in ax_bc.flatten():
+    ax.set_xscale('log')
+fp.save_fig(fig_bc, plot_dir, f'constant_BC_fracBC')
