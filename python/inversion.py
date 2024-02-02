@@ -8,7 +8,7 @@ import gcpy as gc
 
 class OSSE:
     def __init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t, total_t,
-                 BC_t, x_abs_t, random_state=872):
+                 BC_t, x_abs_t, rs):
         '''
         Define an inversion object for an OSSE:
             nstate              ...
@@ -31,7 +31,7 @@ class OSSE:
                                 (BC) or not. Default False.
         '''
         # Initialize the random state
-        self.rs = np.random.RandomState(random_state)
+        self.rs = np.random.RandomState(rs)
 
         # Define dimensions of the state and observation vectors
         self.nstate = nstate
@@ -68,12 +68,19 @@ class OSSE:
         self.x_abs_t = x_abs_t*np.ones(nstate)
 
         # Initial conditions given by steady state with the true BC
+        # (We don't need to use the forward model for these because 
+        # every model simulation has a spin-up that will reach steady
+        # state.)
         self.y0 = self.BC_t + np.cumsum(self.x_abs_t/self.j)
 
         # Pseudo observations
-        self.y = (self.y0.reshape(-1, 1) +
-                  self.rs.normal(0, 0, (self.nstate, self.nobs_per_cell)))
-        self.y = self.y.flatten()
+        # (Again, we don't need to use the forward model for this
+        # because our true BC is constant and the initial conditions
+        # do reflect real steady state)
+        y = (self.y0.reshape(-1, 1) 
+            + self.rs.normal(0, 0, (self.nstate, self.nobs_per_cell)))
+        self.y = y.flatten()
+
 
 class ForwardModel(OSSE):
     def forward_model(self, x, BC):
@@ -88,6 +95,10 @@ class ForwardModel(OSSE):
             L         :    length scale for each grid box
             obs_t     :    times at which to sample the model
         '''
+        # # Get times
+        # if times is None:
+        #     times = self.t[self.t >= self.obs_t.min()]
+
         # Create an empty array (grid box x time) for all
         # model output
         ys = np.zeros((len(self.y0), len(self.t)))
@@ -95,22 +106,14 @@ class ForwardModel(OSSE):
 
         # Iterate through the time steps
         for i, t in enumerate(self.t[1:]):
-            # Get boundary condition for the previous time step
-            # We treat this as a concentration from the
-            # previous time step (follow Lax Wendroff)
-            try:
-                _BC = BC[i]
-            except:
-                _BC = BC
-
-            # Get Courant number for this time step
-            try:
-                _C = self.C[i + 1]
-            except:
-                _C = self.C
-
-            # Do advection and emissions
-            ynew = self.do_advection(ys[:, i], _BC, _C)
+            # Do advection and emissions using the boundary condition
+            # from the previous time step (since Lax Wendroff relies
+            # on the concentrations across the entire domain, including
+            # the boundary condition, at the previous time step) and 
+            # the Courant number from the current time step. 
+            # TO DO: there is some confusion about which Courant number
+            # I should use.
+            ynew = self.do_advection(ys[:, i], BC[i], self.C[i + 1])
             ys[:, i+1] = self.do_emissions(ynew, x)
 
         # Subset all output for observational times
@@ -147,58 +150,91 @@ class Inversion(ForwardModel):
                  BC_t=s.BC_t, x_abs_t=s.x_abs_t,
                  xa_abs=None, sa=s.sa, sa_BC=s.sa_BC, so=s.so, 
                  gamma=None, k=None, BC=None,
-                 opt_BC=False, opt_BC_n=1):
+                 opt_BC=False, opt_BC_n=1, rs=s.random_state):
         # Inherit from the parent class
         OSSE.__init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t,
-                      total_t, BC_t, x_abs_t)
+                      total_t, BC_t, x_abs_t, rs)
 
         # Define the inversion boundary condition
         if BC is None:
-            self.BC = self.BC_t
+            self.BC = np.array([self.BC_t])
         else:
+            if type(BC) != np.ndarray:
+                BC = np.array([BC])
             self.BC = BC
+
+        # If the BC is longer than 1, require that it be t long
+        # and replace the spin up values with the true BC.
+        # n_spinup = len(self.t[self.t < self.obs_t.min()]) - 1
+        n_sim = len(self.t)
+        if len(self.BC) == 1:
+            # If only one BC is provided, extend it to match
+            # the full window and append the true BC_t for the spin-up
+            self.BC = self.BC*np.ones(n_sim)
+        # elif len(self.BC) == (n_spinup + n_sim):
+        #     # If the BC is provided for the entire duration
+        #     # of the simulation including spin-up, force
+        #     # the spin-up to use the true BC.
+        #     self.BC[self.t < self.obs_t.min()] = self.BC_t
+        # elif len(self.BC) == n_sim:
+        #     # In the case that it's provided for the simulation
+        #     # minus the spin-up, append the true BC.
+        #     self.BC = np.append(
+        #         self.BC_t*np.ones(n_spinup), self.BC)
+        # else:
+        #     raise ValueError('The provided boundary condition does not match the temporal dimension of the simulation.')
 
         # Boolean for whether we optimize the BC
         self.opt_BC = opt_BC
         if self.opt_BC:
-            self._nstate = self.nstate + opt_BC_n
+            self._nstate = self.nstate + opt_BC_n + 1
         else:
             self._nstate = self.nstate
 
         # Prior
         if xa_abs is None:
-            self.xa_abs = np.abs(self.rs.normal(loc=80, scale=40, 
+            self.xa_abs = np.abs(self.rs.normal(loc=25, scale=5, 
                                                 size=(self.nstate,)))
         else:
             self.xa_abs = xa_abs
 
+        # Replace y0
+        # self.y0 = self.BC + np.cumsum(self.xa_abs/self.j)
+        # self.y0 = self.forward_model(
+        #     x=self.xa_abs, BC=self.BC)#, # Does this make sense to be BC instead of BC_t? 
+            # times=self.t[self.t < self.obs_t.min() 
+            #              + self.delta_t]).reshape((self.nstate, -1))[:, 0]
+
         # Relative prior
         self.xa = np.ones(self.nstate)
         if self.opt_BC:
-            if (opt_BC_n > 1):
-                BC_chunks = math.ceil(len(self.BC)/opt_BC_n)
-                xa_BC = np.nanmean(
-                    np.pad(
-                        self.BC, 
-                        (0, (BC_chunks - self.BC.size % BC_chunks) % BC_chunks),
-                        mode='constant', 
-                        constant_values=np.NaN).reshape(-1, BC_chunks),
-                    axis=1)
-                self.xa = np.append(self.xa, xa_BC)
-            else:
-                self.xa = np.append(self.xa, np.mean(self.BC))
+            IC_avg = self.BC[self.t < self.obs_t.min()].mean()
+            BC_sim = self.BC[self.t >= self.obs_t.min()] 
+            BC_chunks = math.ceil(len(BC_sim)/opt_BC_n)
+            xa_BC = np.nanmean(
+                np.pad(
+                    BC_sim,
+                    (0, (BC_chunks - BC_sim.size % BC_chunks) % BC_chunks),
+                    mode='constant', 
+                    constant_values=np.NaN).reshape(-1, BC_chunks),
+                axis=1)
+            self.xa = np.append(self.xa, IC_avg)
+            self.xa = np.append(self.xa, xa_BC)
 
         # Prior errors (ppb/day)
-        if type(sa) == float:
+        if type(sa) in [float, int]:
             self.sa = (sa**2)*np.ones(self.nstate)
         else:
             self.sa = sa
 
         if self.opt_BC:
-            self.sa = np.append(self.sa, 50**2*np.ones(opt_BC_n))
+            self.sa = np.append(self.sa, 15**2*np.ones(opt_BC_n + 1))
 
         # Observational errors (ppb)
-        self.so = (so**2)*np.ones(self.nobs)
+        if (type(so) == float) or (type(so) == int):
+            self.so = (so**2)*np.ones(self.nobs)
+        else:
+            self.so = so
         self.gamma = gamma
 
         # Prior model simulation
@@ -236,23 +272,29 @@ class Inversion(ForwardModel):
 
         if self.opt_BC:
             # Add a column for the optimization of the boundary condition
-            if (self._nstate - self.nstate > 1) and (len(self.BC) > 1):
-                BC_chunks = math.ceil(
-                    len(self.BC)/(self._nstate - self.nstate))
-                ypert = []
-                i = 0
-                while i < len(self.BC):
-                    BCpert = self.BC.copy()
-                    BCpert[i:(i + BC_chunks)] += 10
-                    ypert.append(
-                        self.forward_model(
-                            x=self.xa_abs, 
-                            BC=BCpert).flatten().reshape(-1, 1))
-                    i += BC_chunks
-                ypert = np.concatenate(ypert, axis=1)
-            else:
-                ypert = self.forward_model(
-                    x=self.xa_abs, BC=self.BC + 10).flatten().reshape(-1, 1)
+            n_spinup = len(self.t[self.t < self.obs_t.min()])
+            n_sim = len(self.t[self.t >= self.obs_t.min()])
+            
+            # Perturb the initial condition
+            ICpert = self.BC.copy()
+            ICpert[:n_spinup] += 10
+            ypert = [self.forward_model(
+                x=self.xa_abs, BC=ICpert).flatten().reshape(-1, 1)]
+
+            # Now perturb the boundary condition, either in temporal
+            # chunks or in one piece
+            BC_chunks = math.ceil(n_sim/(self._nstate - self.nstate - 1))
+            i = n_spinup
+            while i < len(self.BC):
+                BCpert = self.BC.copy()
+                BCpert[i:(i + BC_chunks)] += 10
+                ypert.append(
+                    self.forward_model(
+                        x=self.xa_abs, 
+                        BC=BCpert).flatten().reshape(-1, 1))
+                i += BC_chunks
+
+            ypert = np.concatenate(ypert, axis=1)
             k = np.append(k, (ypert - self.ya.reshape(-1, 1))/10, axis=1)
 
         self.k = k
@@ -272,6 +314,8 @@ class Inversion(ForwardModel):
         so_inv = np.diag(1/self.so)
 
         # Solve the inversion
+        print(sa_inv.shape)
+        print(self.k.shape)
         self.shat = np.linalg.inv(sa_inv + self.k.T @ so_inv @ self.k)
         self.g = self.shat @ self.k.T @ so_inv
         self.a = np.identity(len(self.xa)) - self.shat @ sa_inv
@@ -345,6 +389,8 @@ class Inversion(ForwardModel):
             self.xhat = self.xhat[:-opt_BC_n]
             
             self.shat = self.shat[:-opt_BC_n, :-opt_BC_n]
+
+            self.a_BC = self.a[-opt_BC_n:, -opt_BC_n:]
             self.a = self.a[:-opt_BC_n, :-opt_BC_n]
             self.g = self.g[:-opt_BC_n, :]
             self.bc_contrib = self.bc_contrib[:-opt_BC_n]
