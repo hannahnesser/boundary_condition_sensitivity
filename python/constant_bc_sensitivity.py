@@ -34,7 +34,7 @@ if not os.path.exists(plot_dir):
 # Define sensitivity test parameters
 ## -------------------------------------------------------------------------##
 # Default is opt_BC = False
-true_BC = inv.Inversion()
+true_BC = inv.Inversion(gamma=1, )
 print(true_BC.t)
 print(true_BC.obs_t)
 
@@ -61,13 +61,13 @@ plt.subplots_adjust(wspace=0.1, hspace=0.1)
 perts = np.arange(5, 55, 10)
 BC_ils = []
 for i, pert in enumerate(perts):
-    pert_BC = inv.Inversion(BC=true_BC.BC_t + pert)
+    pert_BC = inv.Inversion(gamma=1, BC=true_BC.BC_t + pert)
     BC_ils.append(pert_BC.ils)
     ax_summ[0].plot(pert_BC.xp, 
                     np.abs(pert_BC.xhat - true_BC.xhat)/true_BC.xhat,
                     color=fp.color(2*i, lut=10), lw=2,
                     label=f'{pert} ppb')
-    ax_summ_t[0].plot(pert_BC.xp, pert_BC.xa_contrib/pert_BC.tot_correct,
+    ax_summ_t[0].plot(pert_BC.xp, np.abs(pert_BC.bc_contrib/pert_BC.xhat),
                   color=fp.color(2*i, lut=10), ls='--', lw=2)
 
 
@@ -77,7 +77,7 @@ for i, pert in enumerate(perts):
     #     np.abs(pert_BC.xhat - t)/t,
     #     color=fp.color(2*i, lut=10), lw=2)
     # # ax_summ[0, 1].plot(
-    # #     c.xp, pert_BC.xa_contrib/pert_BC.tot_correct,
+    # #     c.xp, np.abs(pert_BC.bc_contrib/pert_BC.xhat),
     # #     color=fp.color(2*i, lut=10), ls='--', lw=2)
 
     ax_bc[0].plot(pert_BC.bc_contrib/pert_BC.tot_correct, 
@@ -102,12 +102,12 @@ us = 24*np.arange(1, 11, 2)
 U_ils = []
 for i, u in enumerate(us):
     cc = fp.color(2*i, lut=10)
-    true_U = inv.Inversion(U=u)
-    pert_U = inv.Inversion(U=u, BC=true_BC.BC_t + 10)
+    true_U = inv.Inversion(gamma=1, U=u)
+    pert_U = inv.Inversion(gamma=1, U=u, BC=true_BC.BC_t + 10)
     U_ils.append(true_U.ils)
     ax_summ[1].plot(pert_U.xp, np.abs(pert_U.xhat - true_U.xhat)/true_U.xhat, 
                     color=cc, lw=2, label=f'{(pert_U.L/u):.1f} day')
-    ax_summ_t[1].plot(pert_U.xp, pert_U.xa_contrib/pert_U.tot_correct,
+    ax_summ_t[1].plot(pert_U.xp, np.abs(pert_U.bc_contrib/pert_U.xhat),
                       color=cc, ls='--', lw=2)
 
     # t = true_U.x_abs_t/true_U.xa_abs
@@ -116,7 +116,7 @@ for i, u in enumerate(us):
     #     np.abs(pert_U.xhat - t)/t,
     #     color=cc, lw=2)
     # # ax_summ[1, 1].plot(
-    # #     c.xp, pert_U.xa_contrib/pert_U.tot_correct,
+    # #     c.xp, np.abs(pert_U.bc_contrib/pert_U.xhat),
     # #     color=cc, ls='--', lw=2)
 
 
@@ -143,16 +143,16 @@ sfs = np.array([1, 2, 3, 4, 5])
 #     # x_abs_t_sf[0] *= sf
 #     xa_abs_sf = dc(true_BC.xa_abs)
 #     xa_abs_sf[0] *= sf
-#     # pert_xa = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf)
-#     # pert_xa_BC = inv.Inversion(x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf,
+#     # pert_xa = inv.Inversion(gamma=1, x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf)
+#     # pert_xa_BC = inv.Inversion(gamma=1, x_abs_t=x_abs_t_sf, xa_abs=xa_abs_sf,
 #     #                            BC=true_BC.BC_t + 10)
-#     pert_xa = inv.Inversion(xa_abs=xa_abs_sf)
-#     pert_xa_BC = inv.Inversion(xa_abs=xa_abs_sf, BC=true_BC.BC_t + 10)
+#     pert_xa = inv.Inversion(gamma=1, xa_abs=xa_abs_sf)
+#     pert_xa_BC = inv.Inversion(gamma=1, xa_abs=xa_abs_sf, BC=true_BC.BC_t + 10)
 #     xa_abs_ils.append(pert_xa.ils)
 #     ax_summ[2, 0].plot(c.xp, 
 #                        np.abs(pert_xa_BC.xhat - pert_xa.xhat)/pert_xa.xhat, 
 #                        color=fp.color(2*i, lut=10), lw=2)
-#     ax_summ[2, 0].plot(c.xp, pert_xa_BC.xa_contrib/pert_xa_BC.tot_correct,
+#     ax_summ[2, 0].plot(c.xp, np.abs(pert_xa_BC.bc_contrib/pert_xa_BC.xhat),
 #                        color=fp.color(2*i, lut=10), ls='--', lw=2)
 
 #     t = true_BC.x_abs_t/true_BC.xa_abs
@@ -161,7 +161,7 @@ sfs = np.array([1, 2, 3, 4, 5])
 #         np.abs(pert_xa_BC.xhat - t)/t,
 #         color=fp.color(2*i, lut=10), lw=2)
 #     ax_summ[2, 1].plot(
-#         c.xp, pert_xa_BC.xa_contrib/pert_xa_BC.tot_correct,
+#         c.xp, np.abs(pert_xa_BC.bc_contrib/pert_xa_BC.xhat),
 #         color=fp.color(2*i, lut=10), ls='--', lw=2)
 
 
@@ -184,14 +184,14 @@ sa_ils =[]
 for i, sf in enumerate(sfs):
     sa_sf = dc(true_BC.sa)
     sa_sf[0] *= sf**2
-    pert_sa = inv.Inversion(sa=sa_sf)
-    pert_sa_BC = inv.Inversion(sa=sa_sf, BC=true_BC.BC_t + 10)
+    pert_sa = inv.Inversion(gamma=1, sa=sa_sf)
+    pert_sa_BC = inv.Inversion(gamma=1, sa=sa_sf, BC=true_BC.BC_t + 10)
     sa_ils.append(pert_sa.ils)
     ax_summ[2].plot(pert_sa_BC.xp, 
                     np.abs(pert_sa_BC.xhat - true_BC.xhat)/true_BC.xhat, 
                     color=fp.color(2*i, lut=10), lw=2, label=f'{sf}')
     ax_summ_t[2].plot(pert_sa_BC.xp, 
-                      pert_sa_BC.xa_contrib/pert_sa_BC.tot_correct,
+                      np.abs(pert_sa_BC.bc_contrib/pert_sa_BC.xhat),
                       color=fp.color(2*i, lut=10), ls='--', lw=2)
 
     ax_bc[2].plot(pert_sa_BC.bc_contrib/pert_sa_BC.tot_correct, 
@@ -229,7 +229,8 @@ for i in range(3):
         # r'$\frac{\vert\hat{x} - \hat{x}_{T}\vert}{\hat{x}_{T}}$')
     # fp.add_labels(
     #     ax_summ[i, 1],
-    #     x    r'$\frac{\vert\hat{x} - x_{T}\vert}{x_{T}}$')
+    #     xlabel,
+    #     r'$\frac{\vert\hat{x} - x_{T}\vert}{x_{T}}$')
 
     fp.add_labels(ax_summ_t[i], '', r'$\zeta^{-1}$')
 
@@ -247,7 +248,8 @@ fp.add_labels(ax_ils[2], 'Scale factor applied\nto 'r'$\sigma_{A,0}$', '',
 # Formatting ax_bc
 fp.add_labels(ax_bc[0], r'$\zeta$', r'$\Delta \hat{x}$')
 fp.add_labels(ax_bc[1], r'$\zeta$', '')
-fp.add_labels(ax_bc[2], r'$\Wind speed', '')
+fp.add_labels(ax_bc[2], r'$\zeta$', '')
+
 fp.save_fig(fig_ils, plot_dir, f'constant_BC_ILS')
 
 fp.save_fig(fig_summ, plot_dir, f'constant_BC_sv')
