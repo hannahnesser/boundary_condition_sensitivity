@@ -36,6 +36,8 @@ if not os.path.exists(plot_dir):
 ## -------------------------------------------------------------------------##
 # Default is opt_BC = False
 true_BC = inv.Inversion(gamma=1)
+print(true_BC.k/true_BC.xa_abs)
+print(true_BC.ya)
 
 # Prior
 fig, ax = fp.get_figax(rows=2)
@@ -45,22 +47,50 @@ fp.add_title(ax[0], 'Base inversion variables')
 ax[0].plot(true_BC.xp, true_BC.x_abs_t, c=fp.color(2), ls='--', label='Truth')
 ax[0].plot(true_BC.xp, true_BC.xa_abs, #yerr=c.xa_abs*c.sa_vec**0.5,
             c=fp.color(4), marker='.', markersize=10, #capsize=2,
-            label=r'Prior($\pm$$\approx$ 50\%)')
+            label=r'Prior($\pm$ 75\%)')
 ax[0].fill_between(true_BC.xp, true_BC.xa_abs - true_BC.xa_abs*true_BC.sa**0.5,
                    true_BC.xa_abs + true_BC.xa_abs*true_BC.sa**0.5,
                    color=fp.color(4), alpha=0.2, zorder=-1)
+
+labels = ['BC optimized', 'BC not optimized']
+ls = ['--', '-']
+for i, optimize_BC in enumerate([True, False]):
+    true_BC = inv.Inversion(gamma=1, opt_BC=optimize_BC)
+    ax[0].plot(true_BC.xp, true_BC.xhat*true_BC.xa_abs, ls=ls[i], 
+               marker='*', markersize=10, 
+               c=fp.color(6), label=f'Posterior\n({labels[i]})')
+
+labels = ['Perturbed BC,\nBC not optimized']
+ls = ['-']
+for i, optimize_BC in enumerate([False]):
+    pert_BC = inv.Inversion(gamma=1, BC=1910, opt_BC=optimize_BC)
+    ax[0].plot(pert_BC.xp, pert_BC.xhat*pert_BC.xa_abs, ls=ls[i], 
+               marker='^', markersize=5, 
+               c=fp.color(1), label=f'Posterior\n({labels[i]})')
+
+# print(pert_BC.k/pert_BC.xa_abs)
+# print(pert_BC.ya)
+# print(pert_BC.c)
+
 handles_0, labels_0 = ax[0].get_legend_handles_labels()
 ax[0] = fp.add_labels(ax[0], '', 'Emissions\n(ppb/day)')
-ax[0].set_ylim(0, 30)
+ax[0].set_ylim(0, 50)
 
 # Observations
 ax[1].plot(true_BC.xp, true_BC.y0, c='black', label='Steady state', zorder=10)
 ax[1].plot(true_BC.xp, 
            true_BC.y.reshape(true_BC.nstate, true_BC.nobs_per_cell),
-           c='grey', label='Observations\n($\pm$ 15 ppb)', lw=0.5, zorder=9)
-ax[1].axhline(1900, color=fp.color(4), label='True boundary\ncondition (1900 ppb)')
-ax[1].axhline(true_BC.y0.mean(), color=fp.color(6),
-              label=f'Mean steady\nstate ({true_BC.y0.mean():.0f} ppb)')
+           c='grey', label='Observations',#\n($\pm$ 15 ppb)',
+            lw=0.5, zorder=9)
+
+# post_mod = (pert_BC.k @ pert_BC.xhat + pert_BC.c).reshape(pert_BC.nstate, -1)
+# for i in range(9, 14):#pert_BC.nobs_per_cell):
+#     ax[1].plot(pert_BC.xp, post_mod[:, i],
+#                c=fp.color(i, lut=7), 
+#                label='Posterior model', lw=0.5)
+# ax[1].axhline(1900, color=fp.color(4), label='True boundary\ncondition (1900 ppb)')
+# ax[1].axhline(true_BC.y0.mean(), color=fp.color(6),
+#               label=f'Mean steady\nstate ({true_BC.y0.mean():.0f} ppb)')
 
 # Error range
 y_err_min = (true_BC.y.reshape(true_BC.nstate, true_BC.nobs_per_cell) - 
@@ -77,7 +107,7 @@ ax[1] = fp.add_legend(ax[1], handles=handles_0, labels=labels_0,
                       bbox_to_anchor=(0.95, 0.5), loc='center left', ncol=1,
                       bbox_transform=fig.transFigure)
 ax[1] = fp.add_labels(ax[1], 'State vector element', 'XCH4\n(ppb)')
-ax[1].set_ylim(true_BC.y0.min() - 10, true_BC.y0.max() + 10)
+ax[1].set_ylim(1890, 2050)
 fig, ax = plot.format_plot(fig, ax, true_BC.nstate)
 fp.save_fig(fig, plot_dir, f'prior_obs')
 
@@ -87,14 +117,14 @@ fp.save_fig(fig, plot_dir, f'prior_obs')
 # Inversion plots
 fig, ax = fp.get_figax(rows=2)
 ax[0].plot(true_BC.xp, true_BC.x_abs_t, c=fp.color(2), ls='--', label='Truth')
-ax[0].plot(true_BC.xp, true_BC.xa_abs, c=fp.color(4), marker='.', markersize=10, 
+ax[0].plot(true_BC.xp, true_BC.xa_abs, c=fp.color(4), marker='.', markersize=10,
            label='Prior')
 
 # Test 1: BC = truth
 ls = ['--', '-']
 labels = ['BC optimized', 'BC not optimized']
 for i, optimize_BC in enumerate([true_BC, False]):
-    true_BC = inv.Inversion(opt_BC=optimize_BC, gamma=1)
+    true_BC = inv.Inversion(gamma=1, opt_BC=optimize_BC)
     xhat_t_err = np.abs(true_BC.xhat*true_BC.xa_abs/true_BC.x_abs_t - 1)
 
     ax[0].plot(true_BC.xp, true_BC.xhat*true_BC.xa_abs, ls=ls[i], 
@@ -104,7 +134,7 @@ for i, optimize_BC in enumerate([true_BC, False]):
                c=fp.color(6))
 
 # Limits
-ax[0].set_ylim(0, 30)
+ax[0].set_ylim(0, 50)
 ax[1].set_xlim(0, 1)
 
 # Add legend
