@@ -5,30 +5,35 @@ from sympy import symbols, pprint
 from sympy import *
 
 # We will solve for the gain matrix for a range of state vector sizes
-mn = 7
+mn = 2
 
 # Initialize the symbols we will use: tau is the lifetime (1/k),
 # sa is the prior error variance (assumed constant), and 
 # so is the observational error variance (also assumed constant).
 # We also defne y = so/(sa*tau^2)
-tau, sa, so, y = symbols('tau sigma_a sigma_o y')
+tau, sa, sb, so, y = symbols('t a b o y')
 
 # Initialize the Jacobian
 k = ones(mn)
 k = k.lower_triangular()
-k = tau*k
+# k = tau*k
+k = 0.2*k
 
-# # Initialize the error matrices
-# so = so*eye(mn)
-# sa = sa*eye(mn)
+# Initialize the error matrices
+# so = so**2*eye(mn)
+# sa = sa**2*eye(mn)
+so = 100*eye(mn)
+sa = 0.25*eye(mn)
+sa[0, 0] = sb**2
 
 # and initialize matrix structures without the proper scaling
-L = ones(mn)
-L = L.lower_triangular()
-I = eye(mn)
+# L = ones(mn)
+# L = L.lower_triangular()
+# I = eye(mn)
 
 x = ones(mn, 1)
 
 # Calculate the product
-g = ((1/tau)*(L.T*L + y**2*I).inv()*L.T)*x
+# g = ((1/tau)*(L.T*L + y**2*I).inv()*L.T)*x
+g = ((sa.inv() + k.T * so.inv() * k).inv() * k.T * so.inv()) #* x
 pprint(simplify(g))
