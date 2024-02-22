@@ -157,11 +157,11 @@ class Inversion(ForwardModel):
 
         # Define the inversion boundary condition
         if BC is None:
-            self.BC = np.array([self.BC_t])
+            BC = np.array([self.BC_t])
         else:
             if type(BC) != np.ndarray:
                 BC = np.array([BC])
-            self.BC = BC
+        self.BC = BC
 
         # If the BC is longer than 1, require that it be t long
         # and replace the spin up values with the true BC.
@@ -187,7 +187,7 @@ class Inversion(ForwardModel):
         # Boolean for whether we optimize the BC
         self.opt_BC = opt_BC
         if self.opt_BC:
-            self._nstate = self.nstate + opt_BC_n + 1
+            self._nstate = self.nstate + opt_BC_n
         else:
             self._nstate = self.nstate
 
@@ -208,18 +208,18 @@ class Inversion(ForwardModel):
         # Relative prior
         self.xa = np.ones(self.nstate)
         if self.opt_BC:
-            IC_avg = self.BC[self.t < self.obs_t.min()].mean()
-            BC_sim = self.BC[self.t >= self.obs_t.min()] 
-            BC_chunks = math.ceil(len(BC_sim)/opt_BC_n)
-            xa_BC = np.nanmean(
-                np.pad(
-                    BC_sim,
-                    (0, (BC_chunks - BC_sim.size % BC_chunks) % BC_chunks),
-                    mode='constant', 
-                    constant_values=np.NaN).reshape(-1, BC_chunks),
-                axis=1)
-            self.xa = np.append(self.xa, IC_avg)
-            self.xa = np.append(self.xa, xa_BC)
+            if (opt_BC_n > 1):
+                BC_chunks = math.ceil(len(self.BC)/opt_BC_n)
+                xa_BC = np.nanmean(
+                    np.pad(
+                        self.BC, 
+                        (0, (BC_chunks - self.BC.size % BC_chunks) % BC_chunks),
+                        mode='constant', 
+                        constant_values=np.NaN).reshape(-1, BC_chunks),
+                    axis=1)
+                self.xa = np.append(self.xa, xa_BC)
+            else:
+                self.xa = np.append(self.xa, np.mean(self.BC))
 
         # Prior errors (ppb/day)
         if type(sa) in [float, int]:
@@ -228,7 +228,7 @@ class Inversion(ForwardModel):
             self.sa = sa
 
         if self.opt_BC:
-            self.sa = np.append(self.sa, 15**2*np.ones(opt_BC_n + 1))
+            self.sa = np.append(self.sa, 50**2*np.ones(opt_BC_n))
 
         # Observational errors (ppb)
         if (type(so) == float) or (type(so) == int):
@@ -274,27 +274,25 @@ class Inversion(ForwardModel):
             # Add a column for the optimization of the boundary condition
             n_spinup = len(self.t[self.t < self.obs_t.min()])
             n_sim = len(self.t[self.t >= self.obs_t.min()])
-            
             # Perturb the initial condition
-            ICpert = self.BC.copy()
-            ICpert[:n_spinup] += 10
-            ypert = [self.forward_model(
-                x=self.xa_abs, BC=ICpert).flatten().reshape(-1, 1)]
-
-            # Now perturb the boundary condition, either in temporal
-            # chunks or in one piece
-            BC_chunks = math.ceil(n_sim/(self._nstate - self.nstate - 1))
-            i = n_spinup
-            while i < len(self.BC):
-                BCpert = self.BC.copy()
-                BCpert[i:(i + BC_chunks)] += 10
-                ypert.append(
-                    self.forward_model(
-                        x=self.xa_abs, 
-                        BC=BCpert).flatten().reshape(-1, 1))
-                i += BC_chunks
-
-            ypert = np.concatenate(ypert, axis=1)
+            # BC = self.BC[self.t >= self.obs_t.min()]
+            if (self._nstate - self.nstate > 1):
+                BC_chunks = math.ceil(
+                    len(self.BC)/(self._nstate - self.nstate))
+                ypert = []
+                i = 0
+                while i < len(self.BC):
+                    BCpert = self.BC.copy()
+                    BCpert[i:(i + BC_chunks)] += 10
+                    ypert.append(
+                        self.forward_model(
+                            x=self.xa_abs, 
+                            BC=BCpert).flatten().reshape(-1, 1))
+                    i += BC_chunks
+                ypert = np.concatenate(ypert, axis=1)
+            else:
+                ypert = self.forward_model(
+                        x=self.xa_abs, BC=self.BC + 10).flatten().reshape(-1, 1)
             k = np.append(k, (ypert - self.ya.reshape(-1, 1))/10, axis=1)
 
         self.k = k
@@ -314,8 +312,6 @@ class Inversion(ForwardModel):
         so_inv = np.diag(1/self.so)
 
         # Solve the inversion
-        print(sa_inv.shape)
-        print(self.k.shape)
         self.shat = np.linalg.inv(sa_inv + self.k.T @ so_inv @ self.k)
         self.g = self.shat @ self.k.T @ so_inv
         self.a = np.identity(len(self.xa)) - self.shat @ sa_inv
@@ -357,11 +353,13 @@ class Inversion(ForwardModel):
         # condition is optimized by the inversion.
         if self.opt_BC:
             opt_BC_n = int(self._nstate - self.nstate)
-            self.bc_contrib = self.a[:, -opt_BC_n:] @ self.xa[-opt_BC_n:]
-            self.xa_contrib = self.a[:, :-opt_BC_n] @ self.xa[:-opt_BC_n]
+            self.bc_contrib = np.abs(self.a[:, -opt_BC_n:] 
+                                     @ self.xa[-opt_BC_n:])
+            self.xa_contrib = np.abs(self.a[:, :-opt_BC_n] 
+                                     @ self.xa[:-opt_BC_n])
         else:
-            self.bc_contrib = self.g @ self.c
-            self.xa_contrib = self.a @ self.xa[:self.nstate]
+            self.bc_contrib = np.abs(self.g @ self.c)
+            self.xa_contrib = np.abs(self.a @ self.xa[:self.nstate])
 
         # Calculate the total model correrction
         self.tot_correct = self.g @ self.y - (self.bc_contrib + self.xa_contrib)
