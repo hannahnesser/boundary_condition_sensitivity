@@ -1,14 +1,12 @@
 import numpy as np
 import math
 from copy import deepcopy as dc
-import sys
-sys.path.append('.')
 import settings as s
-import gcpy as gc
+from utilities import gcpy as gc
 
 class OSSE:
     def __init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t, total_t,
-                 BC_t, x_abs_t, rs):
+                 BCt, xt_abs, rs):
         '''
         Define an inversion object for an OSSE:
             nstate              ...
@@ -18,8 +16,8 @@ class OSSE:
             U
             init_t
             total_t
-            BC_t
-            x_abs_t             True emissions in ppb/day. We assume 
+            BCt
+            xt_abs             True emissions in ppb/day. We assume 
                                 that the true emissions are constant across
                                 the domain, so this is a scalar. Default 
                                 value of 100 ppb/day.
@@ -30,9 +28,6 @@ class OSSE:
                                 inversion optimizes the boundary condition 
                                 (BC) or not. Default False.
         '''
-        # Initialize the random state
-        self.rs = np.random.RandomState(rs)
-
         # Define dimensions of the state and observation vectors
         self.nstate = nstate
         self.nobs_per_cell = nobs_per_cell
@@ -41,7 +36,7 @@ class OSSE:
         # Define a plotting vector 
         self.xp = np.arange(1, nstate + 1)
 
-        # Define the Courant number, grid cell length, and wind speed
+        # Define the grid cell length and wind speed
         self.L = L
         if type(U) != np.ndarray:
             U = np.array([U])
@@ -64,23 +59,20 @@ class OSSE:
         self.tau = 1/self.j
 
         # True quantities (ppb)
-        self.BC_t = BC_t
-        self.x_abs_t = x_abs_t*np.ones(nstate)
+        self.BCt = BCt
+        self.xt_abs = xt_abs*np.ones(nstate)
 
         # Initial conditions given by steady state with the true BC
         # (We don't need to use the forward model for these because 
         # every model simulation has a spin-up that will reach steady
         # state.)
-        self.y0 = self.BC_t + np.cumsum(self.x_abs_t/self.j)
+        self.y0 = self.BCt + np.cumsum(self.xt_abs/self.j)
 
         # Pseudo observations
-        # (Again, we don't need to use the forward model for this
-        # because our true BC is constant and the initial conditions
-        # do reflect real steady state)
-        y = (self.y0.reshape(-1, 1) 
-            + self.rs.normal(0, 0, (self.nstate, self.nobs_per_cell)))
-        self.y = y.flatten()
-
+        self.y = (self.forward_model(x=self.xt_abs, 
+                                     BC=self.BCt*np.ones(len(self.t)))
+                  + np.random.RandomState(rs).normal(
+                        0, 8, (self.nstate, self.nobs_per_cell))).T.flatten()
 
 class ForwardModel(OSSE):
     def forward_model(self, x, BC):
@@ -101,7 +93,7 @@ class ForwardModel(OSSE):
 
         # Create an empty array (grid box x time) for all
         # model output
-        ys = np.zeros((len(self.y0), len(self.t)))
+        ys = np.zeros((self.nstate, len(self.t)))
         ys[:, 0] = self.y0
 
         # Iterate through the time steps
@@ -120,7 +112,7 @@ class ForwardModel(OSSE):
         t_idx = gc.nearest_loc(self.obs_t, self.t)
         ys = ys[:, t_idx]
 
-        return ys.flatten()
+        return ys
 
     def do_emissions(self, y_prev, x):
         y_new = y_prev + x*self.delta_t
@@ -147,79 +139,24 @@ class Inversion(ForwardModel):
     def __init__(self, nstate=s.nstate, nobs_per_cell=s.nobs_per_cell, 
                  Cmax=s.Cmax, L=s.L, U=s.U, 
                  init_t=s.init_t, total_t=s.total_t,
-                 BC_t=s.BC_t, x_abs_t=s.x_abs_t,
+                 BCt=s.BCt, xt_abs=s.xt_abs,
                  xa_abs=None, sa=s.sa, sa_BC=s.sa_BC, so=s.so, 
                  gamma=None, k=None, BC=None,
-                 opt_BC=False, opt_BC_n=1, rs=s.random_state):
+                 opt_BC=False, opt_BC_n=1, sequential=False, rs=s.random_state):
         # Inherit from the parent class
         OSSE.__init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t,
-                      total_t, BC_t, x_abs_t, rs)
-
-        # Define the inversion boundary condition
-        if BC is None:
-            BC = np.array([self.BC_t])
-        else:
-            if type(BC) != np.ndarray:
-                BC = np.array([BC])
-        self.BC = BC
-
-        # If the BC is longer than 1, require that it be t long
-        # and replace the spin up values with the true BC.
-        # n_spinup = len(self.t[self.t < self.obs_t.min()]) - 1
-        n_sim = len(self.t)
-        if len(self.BC) == 1:
-            # If only one BC is provided, extend it to match
-            # the full window and append the true BC_t for the spin-up
-            self.BC = self.BC*np.ones(n_sim)
-        # elif len(self.BC) == (n_spinup + n_sim):
-        #     # If the BC is provided for the entire duration
-        #     # of the simulation including spin-up, force
-        #     # the spin-up to use the true BC.
-        #     self.BC[self.t < self.obs_t.min()] = self.BC_t
-        # elif len(self.BC) == n_sim:
-        #     # In the case that it's provided for the simulation
-        #     # minus the spin-up, append the true BC.
-        #     self.BC = np.append(
-        #         self.BC_t*np.ones(n_spinup), self.BC)
-        # else:
-        #     raise ValueError('The provided boundary condition does not match the temporal dimension of the simulation.')
-
-        # Boolean for whether we optimize the BC
-        self.opt_BC = opt_BC
-        if self.opt_BC:
-            self._nstate = self.nstate + opt_BC_n
-        else:
-            self._nstate = self.nstate
-
+                      total_t, BCt, xt_abs, rs)
+        
         # Prior
         if xa_abs is None:
-            self.xa_abs = np.abs(self.rs.normal(loc=25, scale=5, 
-                                                size=(self.nstate,)))
+            self.xa_abs = np.abs(
+                np.random.RandomState(rs).normal(
+                    loc=25, scale=5, size=(self.nstate,)))
         else:
             self.xa_abs = xa_abs
 
-        # Replace y0
-        # self.y0 = self.BC + np.cumsum(self.xa_abs/self.j)
-        # self.y0 = self.forward_model(
-        #     x=self.xa_abs, BC=self.BC)#, # Does this make sense to be BC instead of BC_t? 
-            # times=self.t[self.t < self.obs_t.min() 
-            #              + self.delta_t]).reshape((self.nstate, -1))[:, 0]
-
         # Relative prior
         self.xa = np.ones(self.nstate)
-        if self.opt_BC:
-            if (opt_BC_n > 1):
-                BC_chunks = math.ceil(len(self.BC)/opt_BC_n)
-                xa_BC = np.nanmean(
-                    np.pad(
-                        self.BC, 
-                        (0, (BC_chunks - self.BC.size % BC_chunks) % BC_chunks),
-                        mode='constant', 
-                        constant_values=np.NaN).reshape(-1, BC_chunks),
-                    axis=1)
-                self.xa = np.append(self.xa, xa_BC)
-            else:
-                self.xa = np.append(self.xa, np.mean(self.BC))
 
         # Prior errors (ppb/day)
         if type(sa) in [float, int]:
@@ -227,18 +164,36 @@ class Inversion(ForwardModel):
         else:
             self.sa = sa
 
-        if self.opt_BC:
-            self.sa = np.append(self.sa, 50**2*np.ones(opt_BC_n))
-
         # Observational errors (ppb)
-        if (type(so) == float) or (type(so) == int):
+        if type(so) in [float, int]:
             self.so = (so**2)*np.ones(self.nobs)
         else:
             self.so = so
         self.gamma = gamma
 
+        # Define the inversion boundary condition (of length of self.t)
+        if BC is None:
+            BC = BCt
+        self.BC = BC*np.ones(len(self.t))
+
+        # Boolean for whether we optimize the BC, and expand the previously
+        # defined quantities to include BC elements
+        self.opt_BC = opt_BC
+        if self.opt_BC:
+            self.opt_BC_n = opt_BC_n
+            self._expand_inversion_for_BC(sa_BC)
+        else:
+            self._nstate = self.nstate
+
+        # Boolean for sequential solution (i.e., optimize BC only, then fluxes 
+        # only)
+        self.sequential = sequential
+
         # Prior model simulation
-        self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).flatten()
+        self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).T.flatten()
+        # print(self.ya)
+        # self.ya = self.ya.flatten()
+        # print(self.ya)
 
         # Build the Jacobian
         if k is None:
@@ -249,11 +204,29 @@ class Inversion(ForwardModel):
 
         # Solve the inversion and get the influence length scale
         self.solve_inversion()
-        self.calculate_ILS()
+        self.calculate_BC_bias_metrics()
         self.remove_BC_elements()
 
+    def _expand_inversion_for_BC(self, sa_BC):
+        # Define dummy variable for longer nstate
+        self._nstate = self.nstate + self.opt_BC_n
+
+        # Expand relative prior to include opt_BC_n BC elements.
+        BC_chunks = math.ceil(len(self.BC)/self.opt_BC_n)
+        xa_BC = np.nanmean(
+            np.pad(
+                self.BC, 
+                (0, (BC_chunks - self.BC.size % BC_chunks) % BC_chunks),
+                mode='constant', 
+                constant_values=np.NaN).reshape(-1, BC_chunks),
+            axis=1)
+        self.xa = np.append(self.xa, xa_BC)
+
+        # Expand prior errors
+        self.sa = np.append(self.sa, sa_BC**2*np.ones(self.opt_BC_n))
+
     def build_jacobian(self):
-        F = lambda x : self.forward_model(x=x, BC=self.BC).flatten()
+        F = lambda x : self.forward_model(x=x, BC=self.BC).T.flatten()
 
         # Initialize the Jacobian
         k = np.zeros((self.nobs, self.nstate))
@@ -272,13 +245,8 @@ class Inversion(ForwardModel):
 
         if self.opt_BC:
             # Add a column for the optimization of the boundary condition
-            n_spinup = len(self.t[self.t < self.obs_t.min()])
-            n_sim = len(self.t[self.t >= self.obs_t.min()])
-            # Perturb the initial condition
-            # BC = self.BC[self.t >= self.obs_t.min()]
-            if (self._nstate - self.nstate > 1):
-                BC_chunks = math.ceil(
-                    len(self.BC)/(self._nstate - self.nstate))
+            if (self.opt_BC_n > 1):
+                BC_chunks = math.ceil(len(self.BC)/self.opt_BC_n)
                 ypert = []
                 i = 0
                 while i < len(self.BC):
@@ -287,12 +255,12 @@ class Inversion(ForwardModel):
                     ypert.append(
                         self.forward_model(
                             x=self.xa_abs, 
-                            BC=BCpert).flatten().reshape(-1, 1))
+                            BC=BCpert).T.flatten().reshape(-1, 1))
                     i += BC_chunks
                 ypert = np.concatenate(ypert, axis=1)
             else:
                 ypert = self.forward_model(
-                        x=self.xa_abs, BC=self.BC + 10).flatten().reshape(-1, 1)
+                        x=self.xa_abs, BC=self.BC + 10).T.flatten().reshape(-1, 1)
             k = np.append(k, (ypert - self.ya.reshape(-1, 1))/10, axis=1)
 
         self.k = k
@@ -304,22 +272,58 @@ class Inversion(ForwardModel):
             self.get_gamma()
         else:
             self.so = self.so/self.gamma
-        self._solve_inversion()
+            self._solve_inversion()
 
     def _solve_inversion(self):
-        # Get the inverse of sa and so
-        sa_inv = np.diag(1/self.sa)
-        so_inv = np.diag(1/self.so)
-
         # Solve the inversion
-        self.shat = np.linalg.inv(sa_inv + self.k.T @ so_inv @ self.k)
-        self.g = self.shat @ self.k.T @ so_inv
-        self.a = np.identity(len(self.xa)) - self.shat @ sa_inv
-        self.xhat = (self.xa + self.g @ (self.y - self.k @ self.xa - self.c))
+        if self.sequential: 
+            # Solve for BC only
+            self._solve_inversion_equations(
+                self.y, self.k[:, -self.opt_BC_n:], self.xa[-self.opt_BC_n:],
+                self.c, self.sa[-self.opt_BC_n:], self.so)
+            print('Sequential BC optimized : ', self.xhat)
+            
+            # Update parameters with output of first inversion
+            ## HON: This currently only works for opt_BC_n == 1
+            self.BC = self.xhat*np.ones(len(self.BC))
+            # self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).T.flatten()
+            self.xa[-self.opt_BC_n:] = self.xhat
+            self.c = self.xhat*np.ones(self.nobs)
+
+            # Solve the inversion with the new paramaters
+            self._solve_inversion_equations(
+                self.y, self.k[:, :-self.opt_BC_n], self.xa[:-self.opt_BC_n],
+                self.c, self.sa[:-self.opt_BC_n], self.so)
+            
+            # Set self.opt_BC to False because now xhat is dimension nstate
+            self.opt_BC = False
+
+        else:
+            self._solve_inversion_equations(
+                self.y, self.k, self.xa, self.c, self.sa, self.so)
+    
+    def _solve_inversion_equations(self, y, k, xa, c, sa, so):
+        # Get the inverse of sa and so
+        if len(sa.shape) == 1:
+            sa_inv = np.diag(1/sa)
+        else:
+            sa_inv = np.linalg.inv(sa)
+        
+        if len(so.shape) == 1:
+            so_inv = np.diag(1/so)
+        else:
+            so_inv = np.linalg.inv(so)
+
+        # Solve for the inversion
+        self.shat = np.linalg.inv(sa_inv + k.T @ so_inv @ k)
+        self.g = self.shat @ k.T @ so_inv
+        self.a = np.identity(len(xa)) - self.shat @ sa_inv
+        self.xhat = (xa + self.g @ (y - k @ xa - c))
+        self.yhat = k @ self.xhat + c
 
     def get_gamma(self, tol=1e-1):
         print('Finding gamma...')
-        gamma = 20
+        gamma = 10
         gamma_not_found = True
         so_orig = dc(self.so)
         while gamma_not_found:
@@ -346,13 +350,13 @@ class Inversion(ForwardModel):
     def cost_obs(self):
         ...
 
-    def calculate_ILS(self, ILS_threshold=0.5):
+    def calculate_BC_bias_metrics(self):
         # First, calculate the contributions from the boundary condition
         # and from the emissions to the model corrrection term, accounting
         # for differences resulting from whether or not the boundary
         # condition is optimized by the inversion.
         if self.opt_BC:
-            opt_BC_n = int(self._nstate - self.nstate)
+            opt_BC_n = int(self.opt_BC_n)
             self.bc_contrib = np.abs(self.a[:, -opt_BC_n:] 
                                      @ self.xa[-opt_BC_n:])
             self.xa_contrib = np.abs(self.a[:, :-opt_BC_n] 
@@ -361,27 +365,12 @@ class Inversion(ForwardModel):
             self.bc_contrib = np.abs(self.g @ self.c)
             self.xa_contrib = np.abs(self.a @ self.xa[:self.nstate])
 
-        # Calculate the total model correrction
-        self.tot_correct = self.g @ self.y - (self.bc_contrib + self.xa_contrib)
-
-        # HN just now removed absolute values
-
-        # Then, use the ratio of the correction attributable to the 
-        # boundary condition together with the defined threshold
-        # to define the influence length scale.
-        try:
-            self.ils = np.where((self.bc_contrib/self.tot_correct) < ILS_threshold)[0][0]
-        except:
-            if np.all(self.bc_contrib/self.tot_correct < ILS_threshold):
-                self.ils = 0
-            elif np.all(self.bc_contrib/self.tot_correct >= ILS_threshold):
-                self.ils = self.nstate
-            else:
-                self.ils = None
+        # # Calculate the total model correrction
+        # self.tot_correct = self.g @ self.y - (self.bc_contrib + self.xa_contrib)
 
     def remove_BC_elements(self):
         if self.opt_BC:
-            opt_BC_n = int(self._nstate - self.nstate)
+            opt_BC_n = int(self.opt_BC_n)
 
             self.xhat_BC = self.xhat[-opt_BC_n:]
             self.xhat = self.xhat[:-opt_BC_n]
@@ -390,7 +379,9 @@ class Inversion(ForwardModel):
 
             self.a_BC = self.a[-opt_BC_n:, -opt_BC_n:]
             self.a = self.a[:-opt_BC_n, :-opt_BC_n]
+
+            self.g_BC = self.g[-opt_BC_n:, :]
             self.g = self.g[:-opt_BC_n, :]
+            
             self.bc_contrib = self.bc_contrib[:-opt_BC_n]
             self.xa_contrib = self.xa_contrib[:-opt_BC_n]
-            self.tot_correct = self.tot_correct[:-opt_BC_n]

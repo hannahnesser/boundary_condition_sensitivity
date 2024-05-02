@@ -7,28 +7,18 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import pickle
-import math
 from scipy.stats import linregress
 
 from os.path import join
 from os import listdir
 import os
 import warnings
-import datetime
 
 # Plotting
-import matplotlib.pyplot as plt
-from matplotlib import rcParams, colorbar, colors
-from matplotlib.colors import LinearSegmentedColormap
-from scipy.ndimage import zoom
-import cartopy.crs as ccrs
-import cartopy
+from matplotlib import rcParams
 
 # Import information for plotting in a consistent fashion
-import sys
-sys.path.append('.')
-import format_plots as fp
-import plot_settings as ps
+from utilities import plot_settings as ps
 
 # Other font details
 rcParams['font.family'] = 'sans-serif'
@@ -187,6 +177,9 @@ def rma(xdata, ydata):
     # else:
     #     y = (ydata - ydata.min())/(ydata.max() - ydata.min())
     #     x = (xdata - xdata.min())/(xdata.max() - xdata.min())
+
+def rel_err(data, truth):
+    return (data - truth)/truth
 
 ## -------------------------------------------------------------------------##
 ## Grid functions

@@ -27,11 +27,11 @@ if not os.path.exists(plot_dir):
 ## -------------------------------------------------------------------------##
 # Define sensitivity test parameters
 ## -------------------------------------------------------------------------##
-U = np.concatenate([np.arange(5, 0, -1), 
-                    np.array([0.1, -0.1]), 
-                    np.arange(-1, -5, -1)])*24
-U = np.concatenate([U, U[::-1]])
-# U = 5*24
+# U = np.concatenate([np.arange(5, 0, -1), 
+#                     np.array([0.1, -0.1]), 
+#                     np.arange(-1, -5, -1)])*24
+# U = np.concatenate([U, U[::-1]])
+U = 5*24
 
 if type(U) in [float, int]:
     suffix = 'constwind'
@@ -39,6 +39,25 @@ else:
     suffix = 'varwind'
 
 true_BC = inv.Inversion(U=U, gamma=1)
+
+pert_random = np.random.RandomState(s.random_state).normal(
+    0, 5, (len(true_BC.t,)))
+
+# # Print out a 2 x 2 example with
+# # (intereted in whatever is applied to delta BC--so maybe just
+# # print xhat - xhat_true)
+# # - standard
+# # - BC correction
+# # - Buffer grid cell
+# # - Combination
+
+# # sa_sf = dc(true_BC.sa)
+# # sa_sf[0] *= 5**2
+# # pert_sa = inv.Inversion(U=U, sa=sa_sf, gamma=1)
+# # print(pert_sa.g.sum(axis=1))
+
+# # pert_sa_bc = inv.Inversion(U=U, sa=sa_sf, gamma=1, BC=1910)
+# # print((pert_sa_bc.g @ (10*np.ones((pert_sa_bc.g.shape[1], 1)))).reshape(-1,))
 
 ## -------------------------------------------------------------------------##
 # Constant BC perturbations
@@ -49,6 +68,9 @@ fig, ax = fp.get_figax(rows=3, cols=2, aspect=2, max_height=4.5, max_width=10,
 ax = ax.T.flatten()
 plt.subplots_adjust(wspace=0.5, hspace=0.5)
 ax[0].set_ylim(-1.05, 1.05)
+# ax_a = [ax[i].twinx() for i in range(3)]
+# ax_b = [ax[i].twinx() for i in range(3)]
+# ax_c = [ax[i].twinx() for i in range(3)]
 
 # BC perturbations
 # The first axis will plot the effect of BC perturbations on the
@@ -56,30 +78,26 @@ ax[0].set_ylim(-1.05, 1.05)
 perts = np.arange(5, 55, 10)
 for i, pert in enumerate(perts):
     pert_BC = inv.Inversion(
-        U=U, gamma=1, BC=true_BC.BCt + pert)
+        U=U, gamma=1, BC=true_BC.BCt + pert_random + pert)
 
     # Plot the relative error in the posterior solution
     ax[0].plot(
-        pert_BC.xp, 
-        stats.rel_err(pert_BC.xhat*pert_BC.xa_abs, true_BC.xt_abs),#/pert,
+        pert_BC.xp, stats.rel_err(pert_BC.xhat*pert_BC.xa_abs, true_BC.xt_abs),
         color=fp.color(8 - 2*i, lut=10), lw=1, ls='-.', label=f'{pert} ppb')
 
     # Plot the relative error in the posterior solution
     ax[1].plot(
-        pert_BC.xp, stats.rel_err(pert_BC.xhat, true_BC.xhat),#/pert,
+        pert_BC.xp, stats.rel_err(pert_BC.xhat, true_BC.xhat),
         color=fp.color(8 - 2*i, lut=10), lw=1, label=f'{pert} ppb')
     
     delta_signal = (((pert_BC.g - true_BC.g) 
                     @ (true_BC.y - true_BC.k @ true_BC.xa - true_BC.c))
                     /true_BC.xhat)
     delta_noise = -(pert_BC.g @ (pert_BC.c - true_BC.c))/true_BC.xhat
-    if suffix == 'constwind':
-        ax[1].plot(pert_BC.xp, delta_signal,#/pert, 
-                   color=fp.color(8 - 2*i, lut=10), 
-                   lw=2, ls='--')
-        ax[1].plot(pert_BC.xp, delta_noise,#/pert, 
-                   color=fp.color(8 - 2*i, lut=10), 
-                   lw=2, ls=':')
+    ax[1].plot(pert_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls='--')
+    ax[1].plot(pert_BC.xp, delta_noise, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls=':')
     # ax[0].plot(
     #     pert_BC.xp, np.abs(stats.rel_err(pert_BC.xhat*pert_BC.xa_abs, 
     #                                      true_BC.xt_abs)),
@@ -101,12 +119,11 @@ fp.add_legend(ax[1], bbox_to_anchor=(1.05, 0.5), loc='center left',
 # ax2 = ax[2].twinx()
 # ax2.set_ylim(-0.05, 0.05)
 for i, pert in enumerate(perts):
-    pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert,
+    pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert_random + pert,
                                 opt_BC=True)
-    print(true_BC.BCt + pert, pert_opt_BC.xhat_BC)
     
     ax[2].plot(
-        pert_opt_BC.xp, stats.rel_err(pert_opt_BC.xhat, true_BC.xhat),#/pert, 
+        pert_opt_BC.xp, stats.rel_err(pert_opt_BC.xhat, true_BC.xhat), 
         color=fp.color(8 - 2*i, lut=10), lw=1, label=f'{pert} ppb')
 
     # ax2.plot(
@@ -117,10 +134,10 @@ for i, pert in enumerate(perts):
     delta_signal = (((pert_opt_BC.g - true_BC.g) @ delta_y_true)/true_BC.xhat)
     delta_y_pert = (pert_opt_BC.y - pert_opt_BC.k @ pert_opt_BC.xa)
     delta_noise = -(pert_opt_BC.g @ (delta_y_pert - delta_y_true))/true_BC.xhat
+    ax[2].plot(pert_opt_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls='--')
     if suffix == 'constwind':
-        ax[2].plot(pert_opt_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
-                lw=2, ls='--')
-        ax[2].plot(pert_opt_BC.xp, delta_noise,#/pert, color=fp.color(8 - 2*i, lut=10), 
+        ax[2].plot(pert_opt_BC.xp, delta_noise, color=fp.color(8 - 2*i, lut=10), 
                 lw=2, ls=':')
 
 fp.add_title(ax[2], r'Boundary condition correction')
@@ -136,38 +153,34 @@ for i, sf in enumerate(sfs):
     sa_sf = dc(true_BC.sa)
     sa_sf[0] *= sf**2
     pert_sa_BC = inv.Inversion(
-        U=U, sa=sa_sf, BC=true_BC.BCt + pert, gamma=1)
+        U=U, sa=sa_sf, BC=true_BC.BCt + pert_random + pert, gamma=1)
 
     # Plot the relative error in the posterior solution
     ax[3].plot(
-        pert_sa_BC.xp, stats.rel_err(pert_sa_BC.xhat, true_BC.xhat),#/pert, 
+        pert_sa_BC.xp, stats.rel_err(pert_sa_BC.xhat, true_BC.xhat), 
         color=fp.color(8 - 2*i, lut=10), lw=1, label=f'{sf}')
 
     # ax3.plot(
     #     pert_sa_BC.xp, pert_sa_BC.g.sum(axis=1), 
     #     color=fp.color(8 - 2*i, lut=10), lw=1)
 
-    # # Add in optimizing BC 
-    # for pert in perts:
-    #     pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert,
-    #                                 opt_BC=True)
-    #     ax[3].plot(
-    #         pert_opt_BC.xp, 
-    #         stats.rel_err(pert_opt_BC.xhat, true_BC.xhat),#/pert, 
-    #         color='green', lw=0.5, ls='-.', zorder=20)
+    # Add in optimizing BC 
+    for pert in perts:
+        pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert_random + pert,
+                                    opt_BC=True)
+        ax[3].plot(
+            pert_opt_BC.xp, stats.rel_err(pert_opt_BC.xhat, true_BC.xhat), 
+            color='green', lw=0.5, ls='-.', zorder=20)
 
     
     delta_signal = (((pert_sa_BC.g - true_BC.g) 
                     @ (true_BC.y - true_BC.k @ true_BC.xa - true_BC.c))
                     /true_BC.xhat)
     delta_noise = -(pert_sa_BC.g @ (pert_sa_BC.c - true_BC.c))/true_BC.xhat
-    if suffix == 'constwind':
-        ax[3].plot(pert_sa_BC.xp, delta_signal,#/pert, 
-                    color=fp.color(8 - 2*i, lut=10), 
-                    lw=2, ls='--')
-        ax[3].plot(pert_sa_BC.xp, delta_noise,#/pert, 
-                    color=fp.color(8 - 2*i, lut=10), 
-                    lw=2, ls=':')
+    ax[3].plot(pert_sa_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls='--')
+    ax[3].plot(pert_sa_BC.xp, delta_noise, color=fp.color(8 - 2*i, lut=10), 
+            lw=2, ls=':')
 
 fp.add_title(ax[3], 'Buffer grid cell\n'f'(perturbation = {pert} ppb)')
 fp.add_legend(ax[3], bbox_to_anchor=(1.05, 0.5), loc='center left', 
@@ -181,32 +194,30 @@ for i, sf in enumerate(sfs):
     sa_sf = dc(true_BC.sa)
     sa_sf[0] *= sf**2
     pert_sa_opt_BC = inv.Inversion(
-        U=U, sa=sa_sf, BC=true_BC.BCt + pert, gamma=1, opt_BC=True)
+        U=U, sa=sa_sf, BC=true_BC.BCt + pert_random + pert, gamma=1, opt_BC=True)
 
     # Plot the relative error in the posterior solution
     ax[4].plot(
-        pert_sa_opt_BC.xp, 
-        stats.rel_err(pert_sa_opt_BC.xhat, true_BC.xhat),#/pert, 
+        pert_sa_opt_BC.xp, stats.rel_err(pert_sa_opt_BC.xhat, true_BC.xhat), 
         color=fp.color(8 - 2*i, lut=10), lw=1, label=f'{sf}')
     
-    # # Add in optimizing BC 
-    # for pert in perts:
-    #     pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert,
-    #                                 opt_BC=True)
-    #     ax[4].plot(
-    #         pert_opt_BC.xp, 
-    #         stats.rel_err(pert_opt_BC.xhat, true_BC.xhat),#/pert, 
-    #         color='green', lw=0.5, ls='-.', zorder=20)
+    # Add in optimizing BC 
+    for pert in perts:
+        pert_opt_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert_random + pert,
+                                    opt_BC=True)
+        ax[4].plot(
+            pert_opt_BC.xp, stats.rel_err(pert_opt_BC.xhat, true_BC.xhat), 
+            color='green', lw=0.5, ls='-.', zorder=20)
 
+    
     delta_y_true = true_BC.y - true_BC.k @ true_BC.xa - true_BC.c
     delta_signal = (((pert_sa_opt_BC.g - true_BC.g) @ delta_y_true)/true_BC.xhat)
     delta_y_pert = (pert_sa_opt_BC.y - pert_sa_opt_BC.k @ pert_sa_opt_BC.xa)
     delta_noise = -(pert_sa_opt_BC.g @ (delta_y_pert - delta_y_true))/true_BC.xhat
+    ax[4].plot(pert_sa_opt_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls='--')
     if suffix == 'constwind':
-        ax[4].plot(pert_sa_opt_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
-                   lw=2, ls='--')
-        ax[4].plot(pert_sa_opt_BC.xp, delta_noise,#/pert, 
-                   color=fp.color(8 - 2*i, lut=10), 
+        ax[4].plot(pert_sa_opt_BC.xp, delta_noise, color=fp.color(8 - 2*i, lut=10), 
                    lw=2, ls=':')
 
 fp.add_title(ax[4], 'Buffer grid cell and boundary condition\ncorrection 'f'(perturbation = {pert} ppb)')
@@ -218,24 +229,21 @@ fp.add_legend(ax[4], bbox_to_anchor=(1.05, 0.5), loc='center left',
 # The fourth axis will plot the effect of correcting the boundary condition 
 # as part of the inversion and then doing the inversion
 for i, pert in enumerate(perts):
-    pert_seq_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert,
+    pert_seq_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert_random + pert,
                                 opt_BC=True, sequential=True)
     
     ax[5].plot(
-        pert_seq_BC.xp, stats.rel_err(pert_seq_BC.xhat, true_BC.xhat),#/pert, 
+        pert_seq_BC.xp, stats.rel_err(pert_seq_BC.xhat, true_BC.xhat), 
         color=fp.color(8 - 2*i, lut=10), lw=1, label=f'{pert} ppb')
     
     delta_signal = (((pert_seq_BC.g - true_BC.g) 
                     @ (true_BC.y - true_BC.k @ true_BC.xa - true_BC.c))
                     /true_BC.xhat)
     delta_noise = -(pert_seq_BC.g @ (pert_seq_BC.c - true_BC.c))/true_BC.xhat
-    if suffix == 'constwind':
-        ax[5].plot(pert_seq_BC.xp, delta_signal,#/pert, 
-                   color=fp.color(8 - 2*i, lut=10), 
-                   lw=2, ls='--')
-        ax[5].plot(pert_seq_BC.xp, delta_noise,#/pert, 
-                   color=fp.color(8 - 2*i, lut=10), 
-                   lw=2, ls=':')
+    ax[5].plot(pert_seq_BC.xp, delta_signal, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls='--')
+    ax[5].plot(pert_seq_BC.xp, delta_noise, color=fp.color(8 - 2*i, lut=10), 
+               lw=2, ls=':')
 
 fp.add_title(ax[5], r'Sequential update')
 leg5 = ax[5].legend(bbox_to_anchor=(1.05, 0.5), loc='center left', 
@@ -249,7 +257,7 @@ leg5 = ax[5].legend(bbox_to_anchor=(1.05, 0.5), loc='center left',
 #           + np.diag(1*np.ones(s.nstate - 1), k=-1)
 #           + np.diag(1*np.ones(s.nstate - 1), k=1))
 #     so = block_diag(*[so for j in range(s.nobs_per_cell)])
-#     pert_cov_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert,
+#     pert_cov_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert_random + pert,
 #                                 so=so)
     
 #     ax[5].plot(
@@ -302,10 +310,10 @@ for i in range(5):
         xlabel = ''
 
     if i in [0, 1, 2]:
-        ylabel = r'$\Delta \hat{x}/\Delta \bar{b}$'
+        ylabel = r'$\Delta x$'
     else:
         ylabel = ''
 
     fp.add_labels(ax[i], xlabel, ylabel)
 
-fp.save_fig(fig, plot_dir, f'constant_BC_{suffix}')
+fp.save_fig(fig, plot_dir, f'random_BC_{suffix}')

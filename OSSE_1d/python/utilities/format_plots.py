@@ -1,41 +1,22 @@
-import xarray as xr
 import numpy as np
-from numpy.linalg import inv, norm, eigh
-from scipy.sparse import diags, identity
-from scipy.stats import linregress
-import pandas as pd
-import copy
-from os.path import join
-
-# clustering
-from sklearn.cluster import KMeans
-
 import math
-import itertools
 from collections import OrderedDict
+from os.path import join
 
 # Plotting
 import matplotlib.pyplot as plt
-from matplotlib import rcParams, colorbar, colors
+from matplotlib import rcParams, colors
 from matplotlib.colors import LinearSegmentedColormap
-import mpl_toolkits.mplot3d
-from matplotlib.collections import PolyCollection, LineCollection
 import cartopy.crs as ccrs
-import cartopy
 import cartopy.feature as cf
-from cartopy.mpl.patch import geos_to_path
-from cmcrameri import cm as cmc
 
-import sys
-sys.path.append('.')
-import plot_settings as ps
+from utilities import plot_settings as ps
 
 # Other font details
 rcParams['font.family'] = 'sans-serif'
 rcParams['font.sans-serif'] = 'AppleGothic'
 rcParams['font.size'] = ps.LABEL_FONTSIZE*ps.SCALE
 rcParams['text.usetex'] = True
-# rcParams['mathtext.fontset'] = 'stixsans'
 rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
 rcParams['axes.titlepad'] = ps.TITLE_PAD
 

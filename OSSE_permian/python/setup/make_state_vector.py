@@ -1,12 +1,17 @@
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
-from os.path import join
+from os.path import join, abspath
+from pathlib import Path
 import sys
-sys.path.append('.')
-import gcpy as gc
 
-data_dir = '../data/'
+project_dir = Path(abspath(__file__)).parent.parent
+sys.path.append(f'{project_dir}/utilities')
+import gcpy as gc
+import utils
+
+project_dir, config = utils.setup()
+data_dir = f'{project_dir}/data'
 
 sv = xr.open_dataset(f'{data_dir}clusters_permian.nc')['Clusters']
 
@@ -52,7 +57,7 @@ for i in range(len(sv.lat)):
 tmp = sv.where(sv > 0, drop=True)
 sv = sv.astype(int)
 
-import format_plots as fp
+from utilities import format_plots as fp
 fig, ax = fp.get_figax(maps=True, lats=sv.lat, lons=sv.lon)
 sv.plot(ax=ax)
 ax = fp.format_map(ax, lats=sv.lat, lons=sv.lon)

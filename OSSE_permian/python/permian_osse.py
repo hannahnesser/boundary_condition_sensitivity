@@ -1,31 +1,28 @@
-from copy import deepcopy as dc
 import numpy as np
 import pandas as pd
 import xarray as xr
-import sys
-sys.path.append('.')
-import permian_inversion as inv
-import format_plots as fp
-import plot_settings as ps
+from utilities import inversion as inv
+from utilities import format_plots as fp
+from utilities import inversion_plot as ip
+from utilities import utils, grid
 
-data_dir = '../data/OSSE'
+project_dir, config = utils.setup()
+data_dir = f'{project_dir}/data/OSSE'
+plot_dir = f'{project_dir}/plots'
+clusters = xr.open_dataarray(f'{data_dir}/StateVector.nc')
 
-# Initialize the random state
-rs = np.random.RandomState(872)
-
-# Get a transparent color map
+# ---------------------------------------- #
+# Plot settings
+# ---------------------------------------- #
 vir = fp.cmap_trans('viridis')
 pla = fp.cmap_trans('plasma')
 
+# ---------------------------------------- #
 # Load data
-y_true = np.load(f'{data_dir}/y.npy')
-# Fxa = np.load(f'{data_dir}/Fxa.npy')
-lon = np.load(f'{data_dir}/lon.npy')
-lat = np.load(f'{data_dir}/lat.npy')
-k = np.load(f'{data_dir}/K.npy')*1e9 # Convert to ppb
-clusters = xr.open_dataarray(f'{data_dir}/StateVector.nc')
-# clusters = clusters.where(clusters > 0, drop=True)
-print(k.shape)
+# ---------------------------------------- #
+true_BC = inv.Inversion()
+
+k = np.load(f'{data_dir}/{config["k"]}')*1e9 # to ppb
 
 # Identify border grid cells
 borders = clusters.where(clusters > 0, drop=True)
@@ -52,9 +49,9 @@ nstate = k.shape[1]
 # Process the absolute prior emissions (final units are kg/km2/hr)
 x_orig_abs = xr.open_dataset(f'{data_dir}/HEMCO_diagnostics.202005010000.nc')
 area = x_orig_abs['AREA']
-area = inv.clusters_2d_to_1d(area, clusters).reshape((-1, 1))
+area = grid.clusters_2d_to_1d(area, clusters).reshape((-1, 1))
 x_orig_abs = x_orig_abs['EmisCH4_Total'].squeeze(drop=True)
-x_orig_abs = inv.clusters_2d_to_1d(x_orig_abs, clusters)
+x_orig_abs = grid.clusters_2d_to_1d(x_orig_abs, clusters)
 x_orig_abs = x_orig_abs.reshape((-1, 1))
 x_orig_abs *= (1e3)**2*(60*60)
 
@@ -67,7 +64,7 @@ x_true_abs = xr.open_dataset(f'{data_dir}/permian_EDF_2019.nc')
 x_true_abs = x_true_abs.sel(lat=clusters.where(clusters > 0, drop=True)['lat'],
                   lon=clusters.where(clusters > 0, drop=True)['lon'])
 x_true_abs = x_true_abs['EmisCH4_Oil'] + x_true_abs['EmisCH4_Gas']
-x_true_abs = inv.clusters_2d_to_1d(x_true_abs, clusters)
+x_true_abs = grid.clusters_2d_to_1d(x_true_abs, clusters)
 x_true_abs = x_true_abs.reshape((-1, 1))
 x_true_abs *= (1e3)**2*(60*60)
 
@@ -113,78 +110,66 @@ x_true = x_true_abs/xa_abs
 # Define the true boundary condition, which is expressed through c
 c_true = 1850*np.ones((nobs, 1))
 
-# Figure out the amount of variance that's appropriate for the 
-# observations
-lat_g = np.round(lat/0.25)*0.25
-lon_g = np.round(lon/0.3125)*0.3125
-y_g = pd.DataFrame({'lat' : lat_g.reshape(-1,),
-                    'lon' : lon_g.reshape(-1,),
-                    'y_true' : y_true.reshape(-1,)})
-y_std = y_g.groupby(['lat', 'lon']).std()
-print('The mean variance at 0.25x0.3125 is : ', y_std.mean())
+# # Figure out the amount of variance that's appropriate for the 
+# # observations
+# lat_g = np.round(lat/0.25)*0.25
+# lon_g = np.round(lon/0.3125)*0.3125
+# y_g = pd.DataFrame({'lat' : lat_g.reshape(-1,),
+#                     'lon' : lon_g.reshape(-1,),
+#                     'y_true' : y_true.reshape(-1,)})
+# y_std = y_g.groupby(['lat', 'lon']).std()
+# print('The mean variance at 0.25x0.3125 is : ', y_std.mean())
 
 # Generate pseudo-observations
-y = k @ x_true + c_true + rs.normal(0, 10, (nobs, 1))
+y = k @ x_true + c_true + np.random.RandomState(config['random_state']).normal(0, 10, (nobs, 1))
 
-# Solve the inversion
-# gamma = inv.get_gamma(xa, sa, y, so, k, c_true)
-gamma = 1
-so_g = so/gamma
-xhat_true, a, _, _ = inv.solve_inversion(xa, sa, y, so_g, k, c_true)
-total_xhat_true = (xhat_true*xa_abs*area)[interior2].sum()*(24*31*1e-6*1e-6)
-print(f'True posterior emissions total : {total_xhat_true:.2f} Gg/month')
+def solve_inversion(xa, sa, y, so, k, c):
+    # Solve the inversion
+    kso_inv = k/so
+    sa_inv = np.diag(1/sa.reshape(-1,))
 
-fig, ax = fp.get_figax(cols=2, maps=True, 
-                       lats=clusters.lat, lons=clusters.lon)
+    shat = np.linalg.inv(sa_inv + kso_inv.T @ k)
+    g = shat @ kso_inv.T
+    a = np.identity(len(xa)) - shat @ sa_inv
+    xhat = (xa + g @ (y - k @ xa - c))
+    gsum = g.sum(axis=1)
 
-fig, ax[0], c = inv.plot_state(x_true_abs, clusters, title='True emissions',
-                               default_value=0, cmap=vir, 
-                               vmin=0, vmax=6, cbar=False, 
-                               fig_kwargs={'figax' : [fig, ax[0]]})
+    bc_contrib = (g @ c)
+    xa_contrib = (a @ xa)
+    tot_correct = bc_contrib + xa_contrib
+    zeta = bc_contrib/xhat#/tot_correct
 
-# Plot the observations
-lat_g = np.round(lat/0.1)*0.1
-lon_g = np.round(lon/0.1)*0.1
-y_g = pd.DataFrame({'lat' : lat_g.reshape(-1,),
-                    'lon' : lon_g.reshape(-1,),
-                    'y' : y.reshape(-1,)})
-y_g = xr.Dataset.from_dataframe(y_g.groupby(['lat', 'lon']).mean())
-c2 = y_g['y'].plot(ax=ax[1], vmin=1830, vmax=1870, cmap='magma', 
-                  add_colorbar=False, snap=True)
-# ax[1] = fp.format_map(ax[1], lats=clusters.lat, lons=clusters.lon)
-ax[1] = fp.add_title(ax[1], 'Pseudo-observations')
+    return xhat, np.diag(a), zeta, gsum
 
+# # Solve the inversion
+# # gamma = inv.get_gamma(xa, sa, y, so, k, c_true)
+# gamma = 1
+# so_g = so/gamma
+xhat_true, a, _, _ = solve_inversion(xa, sa, y, so, k, c_true)
+# total_xhat_true = (xhat_true*xa_abs*area)[interior2].sum()*(24*31*1e-6*1e-6)
+# print(f'True posterior emissions total : {total_xhat_true:.2f} Gg/month')
 
-cax = fp.add_cax(fig, ax[0], horizontal=True)
-cb = fig.colorbar(c, ax=ax[0], cax=cax, orientation='horizontal')
-cb = fp.format_cbar(cb, cbar_title='Methane emissions\n'r'(kg/km$^2$/hr)',
-                    horizontal=True)
-
-cax = fp.add_cax(fig, ax[1], horizontal=True)
-cb = fig.colorbar(c2, ax=ax[1], cax=cax, orientation='horizontal')
-cb = fp.format_cbar(cb, cbar_title='Methane column\nconcentration (ppb)',
-                    horizontal=True)
-
-fp.save_fig(fig, '../plots/permian/', 'x_true_and_obs')
+# print(xhat_true.flatten())
+# print(true_BC.xhat.flatten())
 
 # Plot the prior
 fig, ax = fp.get_figax(cols=2, rows=2, maps=True, 
                        lats=clusters.lat, lons=clusters.lon)
 fig.subplots_adjust(hspace=0.01)
-fig, ax[0, 0], c = inv.plot_state(x_true_abs, clusters, title='True emissions',
+fig, ax[0, 0], c = ip.plot_state(x_true_abs, clusters, title='True emissions',
                                default_value=0, cmap=vir, 
                                vmin=0, vmax=6, cbar=False, 
                                fig_kwargs={'figax' : [fig, ax[0, 0]]})
-fig, ax[0, 1], c = inv.plot_state(xa_abs, clusters, title='Prior emissions',
+fig, ax[0, 1], c = ip.plot_state(xa_abs, clusters, title='Prior emissions',
                                default_value=0, cmap=vir, 
                                vmin=0, vmax=6, cbar=False, 
                                fig_kwargs={'figax' : [fig, ax[0, 1]]})
-fig, ax[1, 0], ca = inv.plot_state(a, clusters, 
+fig, ax[1, 0], ca = ip.plot_state(a, clusters, 
                                title='Information content',
                                default_value=0, cmap=pla, 
                                vmin=0, vmax=1, cbar=False, 
                                fig_kwargs={'figax' : [fig, ax[1, 0]]})
-fig, ax[1, 1], c = inv.plot_state(xhat_true*xa_abs, clusters, 
+fig, ax[1, 1], c = ip.plot_state(xhat_true*xa_abs, clusters, 
                                title='Posterior emissions',
                                default_value=0, cmap=vir, 
                                vmin=0, vmax=6, cbar=False, 
@@ -203,16 +188,16 @@ cb = fp.format_cbar(cb, cbar_title='Averaging kernel\nsensitivities',
 fp.save_fig(fig, '../plots/permian/', 'inversion_true')
 
 
+
 # ----------------------------------------------------------------- #
 # Boundary condition perturbations
 # ----------------------------------------------------------------- #
 c = 1840*np.ones((nobs, 1))
 # gamma = inv.get_gamma(xa, sa, y, so, k, c)
-gamma = 1
-so_g = so/gamma
-xhat, a, zeta, gsum = inv.solve_inversion(xa, sa, y, so_g, k, c)
-xhat = (xhat*xhat/(xhat - zeta))
-
+# gamma = 1
+# so_g = so/gamma
+xhat, a, zeta, gsum = solve_inversion(xa, sa, y, so, k, c)
+# xhat = (xhat*xhat/(xhat - zeta))
 
 # total_xhat_pert = (xhat*xa_abs*area)[interior2].sum()*(24*31*1e-6*1e-6)
 # print(f'Perturbed posterior emissions total : {total_xhat_pert:.2f} Gg/month')

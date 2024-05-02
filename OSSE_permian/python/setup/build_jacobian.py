@@ -1,8 +1,6 @@
 ## Run from inversion directory in IMI
 root_dir = '/n/holyscratch01/jacob_lab/hnesser/permian_OSSE_dev'
 
-import sys
-sys.path.append(f'{root_dir}/src/inversion_scripts/')
 import glob
 import pickle
 from copy import deepcopy as dc

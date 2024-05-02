@@ -1,0 +1,39 @@
+# ---------------------------------------- #
+# Inversion files
+# ---------------------------------------- #
+y_true : 'y.npy'
+k : 'K.npy'
+clusters : 'StateVector.nc'
+
+# ---------------------------------------- #
+# Inversion variables
+# ---------------------------------------- #
+sa : 0.5
+so : 15
+bc_true : 1850
+
+# ---------------------------------------- #
+# Inversion settings
+# ---------------------------------------- #
+random_state : 872
+
+# ---------------------------------------- #
+# Plot settings
+# ---------------------------------------- #
+# Figure sizes
+scale : 1
+width : 5 # previously 10
+height : 4.5 # previously 9
+
+# Fontsizes
+title_size : 15
+subtitle_size : 13
+label_size : 11
+tick_size : 9
+
+# Position
+title_loc : 1
+title_pad : 10
+cbar_pad : 0.05
+label_pad : 10
+cbar_label_pad : 30

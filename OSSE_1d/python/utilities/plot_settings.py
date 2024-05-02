@@ -1,10 +1,10 @@
 # Figure sizes
-SCALE = 1
-PRES_SCALE = 2
+SCALE = 2
+# PRES_SCALE = 2
 BASE_WIDTH = 5 # previously 10
-BASE_HEIGHT = 4.5 # previously 9
-PRES_WIDTH = 5
-PRES_HEIGHT = 4.3
+BASE_HEIGHT = 4.3 # previously 9
+# PRES_WIDTH = 5
+# PRES_HEIGHT = 4.3
 
 # Fontsizes
 TITLE_FONTSIZE = 15

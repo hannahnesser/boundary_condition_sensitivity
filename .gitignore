@@ -1,4 +1,4 @@
-python/__pycache__
+**__pycache__
 
 # sublme settings
 *sublime*
@@ -16,6 +16,14 @@ python/__pycache__
 
 # csvs
 **.csv
+
+# Zips
+**.zip
+
+# Numpy files
+**.npy
+git rm --cached <big_file>
+git commit --amend .
 
 # images
 **.png
