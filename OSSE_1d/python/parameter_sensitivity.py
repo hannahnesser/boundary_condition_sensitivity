@@ -314,4 +314,4 @@ ax[2] = fp.add_title(ax[2], 'Varying lifetime')
 ax[2] = fp.add_labels(ax[2], 'Grid cell lifetime [hr]', '')
 
 fp.save_fig(fig, plot_dir, f'parameter_sensitivity_constwind')
-# %%
+  # %%
