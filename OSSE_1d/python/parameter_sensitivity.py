@@ -25,11 +25,16 @@ if not os.path.exists(plot_dir):
 ## -------------------------------------------------------------------------##
 # Get the true inversion
 ## -------------------------------------------------------------------------##
-# U = np.concatenate([np.arange(5, 0, -1), 
-#                     np.array([0.1, -0.1]), 
-#                     np.arange(-1, -5, -1)])*24
-# U = np.concatenate([U, U[::-1]])
-U = 5*24
+U = np.concatenate([np.arange(5, 0, -1), 
+                    np.array([0.1, -0.1]), 
+                    np.arange(-1, -5, -1)])*24
+U = np.concatenate([U, U[::-1]])
+# U = 5*24
+
+if type(U) in [float, int]:
+    suffix = 'constwind'
+else:
+    suffix = 'varwind'
 
 true_BC = inv.Inversion(gamma=1, U=U)
 true_BC_opt = inv.Inversion(gamma=1, opt_BC=True, U=U)
@@ -51,7 +56,8 @@ def get_half_err(xhat, truth):
 nsamples = int(1e2) 
 sas = np.arange(0.25, 2.25, 0.25)
 sos = np.arange(5, 45, 5)
-Us = 24*np.array([2.5, 5, 7.5, 10, 12.5, 15])
+if suffix == 'constwind':
+    Us = 24*np.array([2.5, 5, 7.5, 10, 12.5, 15])
 var_params = {'sa' : np.zeros((len(sas), nsamples)), 
               'so' : np.zeros((len(sos), nsamples)), 
               'U' : np.zeros((len(Us), nsamples))}
@@ -163,6 +169,9 @@ for j in range(nsamples):
                                                      var_so.xt_abs)        
 
     # Lifetime variations
+    if suffix == 'varwind':
+        continue
+    
     for i, U in enumerate(Us):
         # Standard inversion
         var_U = inv.Inversion(rs=j, U=U, gamma=1, BC=true_BC.BCt + pert)

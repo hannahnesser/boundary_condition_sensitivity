@@ -357,13 +357,12 @@ class Inversion(ForwardModel):
         # condition is optimized by the inversion.
         if self.opt_BC:
             opt_BC_n = int(self.opt_BC_n)
-            self.bc_contrib = np.abs(self.a[:, -opt_BC_n:] 
-                                     @ self.xa[-opt_BC_n:])
-            self.xa_contrib = np.abs(self.a[:, :-opt_BC_n] 
-                                     @ self.xa[:-opt_BC_n])
+            self.bc_contrib = self.a[:, -opt_BC_n:] @ self.xa[-opt_BC_n:]
+            self.xa_contrib = self.a[:, :-opt_BC_n] @ self.xa[:-opt_BC_n]
+
         else:
-            self.bc_contrib = np.abs(self.g @ self.c)
-            self.xa_contrib = np.abs(self.a @ self.xa[:self.nstate])
+            self.bc_contrib = self.g @ self.c
+            self.xa_contrib = self.a @ self.xa[:self.nstate]
 
         # # Calculate the total model correrction
         # self.tot_correct = self.g @ self.y - (self.bc_contrib + self.xa_contrib)
@@ -385,3 +384,34 @@ class Inversion(ForwardModel):
             
             self.bc_contrib = self.bc_contrib[:-opt_BC_n]
             self.xa_contrib = self.xa_contrib[:-opt_BC_n]
+
+    def estimate_D(self, sa_bc, R):
+        k = np.abs(self.U).mean()/self.L
+        xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
+        numer = (k*sa_bc*(self.sa**0.5*self.xa_abs).mean()
+                 - R*(self.sa**0.5*self.xa_abs).mean()**2 
+                 - R*k**2*(self.so**0.5).mean()**2)
+        denom = R*(self.sa**0.5*xD).mean()**2
+        return np.sqrt(-numer/denom)*self.L
+    
+    # def estimate_delta_xhat_full(self, sa_bc):
+    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+    #     xD = np.cumsum(self.xa_abs)
+    #     sa_xD
+    #     numer = (self.L**2*np.abs(self.U).mean()**3*sa_bc
+    #              *(self.sa**0.5).mean()**2
+    #              *(self.so**0.5).mean()**2
+    #              *self.xa_abs)
+    #     denom = (D**3*(self.sa**0.5*xD).mean()**2
+    #              *(self.L**2*(self.sa**0.5*self.xa_abs).mean()**2 
+    #                + np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
+    #              + D**2*self.L*np.abs(self.U).mean()**2)
+
+    def estimate_delta_xhat(self, sa_bc):
+        # k = np.abs(self.U).mean()/self.L
+        D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+        xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
+        numer = self.L*np.abs(self.U).mean()*sa_bc*self.sa*self.xa_abs
+        denom = (self.sa*(D**2*xD**2 + self.L**2*self.xa_abs**2) + 
+                 np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
+        return -numer/denom

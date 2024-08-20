@@ -4,7 +4,7 @@ import xarray as xr
 from utilities import inversion as inv
 from utilities import format_plots as fp
 from utilities import inversion_plot as ip
-from utilities import utils
+from utilities import utils, grid
 
 project_dir, config = utils.setup()
 data_dir = f'{project_dir}/data/OSSE'
@@ -75,6 +75,21 @@ cb = fp.format_cbar(cb, cbar_title=r'$\zeta$',
 #                     horizontal=True)
 
 fp.save_fig(fig, plot_dir, 'const_pert')
+
+
+fig, ax = fp.get_figax(aspect=2)
+diff = (pert_BC.xhat - true_BC.xhat)/true_BC.xhat
+diff = grid.clusters_1d_to_2d(diff, clusters, 0)
+diff = diff.to_dataframe().reset_index()
+lat_center = (clusters['lat'].min() + clusters['lat'].max())/2
+lat_delta = 0.25
+lon_center = (clusters['lon'].min() + clusters['lon'].max())/2
+lon_delta = 0.3125
+diff['lat_index'] = np.abs(diff['lat'] - lat_center)/lat_delta
+diff['lon_index'] = np.abs(diff['lon'] - lon_center)/lon_delta
+diff['index'] = np.maximum(diff['lat_index'], diff['lon_index'])
+print(diff)
+
 
 # # ---------------------------------------- #
 # # Plot the inversion with the true BC

@@ -31,7 +31,7 @@ fp.add_title(ax[0], 'Base inversion variables')
 ax[0].plot(orig.xp, orig.xt_abs, c=fp.color(2), ls='--', label='Truth')
 ax[0].plot(orig.xp, orig.xa_abs, #yerr=c.xa_abs*c.sa_vec**0.5,
             c=fp.color(4), marker='.', markersize=10, #capsize=2,
-            label=r'Prior($\pm$ 75\%)')
+            label=r'Prior($\pm$ 50\%)')
 ax[0].fill_between(orig.xp, orig.xa_abs - orig.xa_abs*orig.sa**0.5,
                    orig.xa_abs + orig.xa_abs*orig.sa**0.5,
                    color=fp.color(4), alpha=0.2, zorder=-1)

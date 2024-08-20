@@ -145,3 +145,46 @@ def nearest_loc(data, compare_data):
     indices = np.abs(compare_data.reshape(-1, 1) -
                      data.reshape(1, -1)).argmin(axis=0)
     return indices
+
+def get_distances(data):
+    '''
+    Get the distance between lat/lon points. It takes as input a
+    tuple of (lat, lon)
+    '''
+    # Technically, this could be sped up by recognizing that any latitude 
+    # point to another latitude has the same distance. It could also be 
+    # sped up by only calculating the lower diagonal
+    data_d, distances = _create_distances_array(data)
+    dist = lambda idx : _get_distance(data_d, idx)
+    distances = distances.apply(dist, axis=1).T
+    distances = distances.map(lambda x: x.km)
+    return distances
+
+def _create_distances_array(data):
+    '''
+    This function takes data in the form of a pandas DataFrame
+    with a lat and lon column, adds a tuple latlon column (required
+    for the get_distance fucntion later on), and creates an empty
+    DataFrame of shape ndata x ndata that will contain the distances
+    between each point and every other point
+    '''
+    # Require that the input is a pandas dataframe
+    if type(data) != pd.core.frame.DataFrame:
+        raise TypeError('Data input is not a pandas dataframe.')
+
+    # Create a lat lon column
+    data_d = data.copy()
+    data_d['latlon'] = list(zip(data_d['lat'], data_d['lon']))
+    
+    # Create an empty dataframe to store the distances between 
+    # each point
+    distances = pd.DataFrame(np.zeros((data_d.shape[0], data_d.shape[0])),
+                             index=data_d.index, columns=data_d.index)
+    
+    return data_d, distances
+    
+def _get_distance(data, idx):
+    end_point = data.loc[idx.name, 'latlon']
+    distances = data['latlon'].apply(distance, args=(end_point,),
+                                     ellipsoid='WGS-84')
+    return distances
