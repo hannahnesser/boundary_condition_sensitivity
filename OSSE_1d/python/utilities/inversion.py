@@ -218,7 +218,7 @@ class Inversion(ForwardModel):
                 self.BC, 
                 (0, (BC_chunks - self.BC.size % BC_chunks) % BC_chunks),
                 mode='constant', 
-                constant_values=np.NaN).reshape(-1, BC_chunks),
+                constant_values=np.nan).reshape(-1, BC_chunks),
             axis=1)
         self.xa = np.append(self.xa, xa_BC)
 
@@ -386,13 +386,17 @@ class Inversion(ForwardModel):
             self.xa_contrib = self.xa_contrib[:-opt_BC_n]
 
     def estimate_D(self, sa_bc, R):
-        k = np.abs(self.U).mean()/self.L
-        xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
-        numer = (k*sa_bc*(self.sa**0.5*self.xa_abs).mean()
-                 - R*(self.sa**0.5*self.xa_abs).mean()**2 
-                 - R*k**2*(self.so**0.5).mean()**2)
-        denom = R*(self.sa**0.5*xD).mean()**2
-        return np.sqrt(-numer/denom)*self.L
+        # k = np.abs(self.U).mean()/self.L
+        # xa = self.xa_abs
+        # xd = np.append(0, np.cumsum(self.xa_abs))[:-1]
+        # so = (self.so**0.5).mean()**2
+        # D = np.abs(xa*k*sa_bc/(R*xd**2) - k**2*so/(self.sa*xd**2) - xa**2/xd**2)
+        # return self.L*np.sqrt(D)
+        delta_xhat = np.abs(self.estimate_delta_xhat(sa_bc))
+        print(delta_xhat)
+        print(delta_xhat.max())
+        print(delta_xhat.max()*R)
+        return np.where(delta_xhat < R*delta_xhat.max())
     
     # def estimate_delta_xhat_full(self, sa_bc):
     #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
@@ -407,11 +411,67 @@ class Inversion(ForwardModel):
     #                + np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
     #              + D**2*self.L*np.abs(self.U).mean()**2)
 
+    # This works adequately, commenting it out to try something else
+    # def estimate_delta_xhat(self, sa_bc):
+    #     # k = np.abs(self.U).mean()/self.L
+    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+    #     xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
+    #     numer = self.L*np.abs(self.U).mean()*sa_bc*self.sa*self.xa_abs
+    #     denom = (self.sa*(D**2*xD**2 + self.L**2*self.xa_abs**2) + 
+    #              np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
+    #     return -numer/denom
+
     def estimate_delta_xhat(self, sa_bc):
-        # k = np.abs(self.U).mean()/self.L
         D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-        xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
-        numer = self.L*np.abs(self.U).mean()*sa_bc*self.sa*self.xa_abs
-        denom = (self.sa*(D**2*xD**2 + self.L**2*self.xa_abs**2) + 
-                 np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
-        return -numer/denom
+        xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
+        U = np.abs(self.U).mean()
+        so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
+
+        kL = self.L/U
+        kD = D/U
+
+        numer = kL*self.sa*self.xa_abs*sa_bc # Not xa_abs^2 because we want relative change
+        denom = (self.sa*(kD**2*xD**2 + kL**2*self.xa_abs**2) + so)
+        # m2 ppb2/hr2
+        
+        # # Calculate covariance
+        # cov_xD = self.L**2*self.sa**2*self.xa_abs**2 + U**2*self.sa*so
+        # # m2 ppb2/hr2
+        # cov_x = D**2*self.sa**2*xD**2 + U**2*self.sa*so # m2 ppb2/hr2
+        # cov_xxD = -D*self.L*self.sa**2*self.xa_abs*xD
+
+        return -numer/denom #, cov_xD/denom, cov_x/denom, cov_xxD/denom
+
+    # This is using the full 2x2 example, but it generates an estimate that is
+    # too low
+    def estimate_delta_xhat_2x2(self, sa_bc):
+        # U = np.abs(self.U).mean()
+        # D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+        # so = (self.so**0.5).mean()**2
+        # xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
+        D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+        xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
+        U = np.abs(self.U).mean()
+        so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
+        # xA = np.mean(self.xa_abs)*np.ones(len(self.xa_abs))
+
+        kL = self.L/U
+        kD = D/U
+
+        numer = self.L * sa_bc * kL * self.sa * so * self.xa_abs
+        denom1 = D * kD**2 * kL**2 * self.sa**2 * self.xa_abs**2 * xD**2
+        denom2 = (D + self.L) * kD**2 * self.sa * so * xD**2
+        denom3 = self.L * kL**2 * self.sa * so * self.xa_abs**2
+        denom4 = self.L * so**2
+
+        # print(f'Numerator : {numer}')
+        # print(f'Denominator 1 : {denom1}')
+        # print(f'Denominator 2 : {denom2}')
+        # print(f'Denominator 3 : {denom3}')
+        # print(f'Denominator 4 : {denom4}')
+        # print(f'Metric : {-numer/(denom1 + denom2 + denom3 + denom4)}')
+        # print(f'Error ratio : {self.sa/so}')
+        # print(f'Kx : {kL * self.xa_abs}')
+        # print(f'Kx mean : {(kL * self.xa_abs).mean()}')
+
+        return -numer/(denom1 + denom2 + denom3 + denom4)

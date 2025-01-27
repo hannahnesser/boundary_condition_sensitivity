@@ -20,15 +20,6 @@ from matplotlib import rcParams
 # Import information for plotting in a consistent fashion
 from utilities import plot_settings as ps
 
-# Other font details
-rcParams['font.family'] = 'sans-serif'
-rcParams['font.sans-serif'] = 'AppleGothic'
-rcParams['font.size'] = ps.LABEL_FONTSIZE*ps.SCALE
-rcParams['text.usetex'] = True
-# rcParams['mathtext.fontset'] = 'stixsans'
-rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
-rcParams['axes.titlepad'] = 0
-
 ## -------------------------------------------------------------------------##
 ## Loading functions
 ## -------------------------------------------------------------------------##

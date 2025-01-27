@@ -13,11 +13,11 @@ import cartopy.feature as cf
 from utilities import plot_settings as ps
 
 # Other font details
-rcParams['font.family'] = 'sans-serif'
-rcParams['font.sans-serif'] = 'AppleGothic'
+# rcParams['font.family'] = 'sans-serif'
+# rcParams['font.sans-serif'] = 'AppleGothic'
 rcParams['font.size'] = ps.LABEL_FONTSIZE*ps.SCALE
-rcParams['text.usetex'] = True
-rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
+# rcParams['text.usetex'] = True
+# rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
 rcParams['axes.titlepad'] = ps.TITLE_PAD
 
 from matplotlib.font_manager import findfont, FontProperties
