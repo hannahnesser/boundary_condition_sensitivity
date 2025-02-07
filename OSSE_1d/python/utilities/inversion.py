@@ -393,9 +393,6 @@ class Inversion(ForwardModel):
         # D = np.abs(xa*k*sa_bc/(R*xd**2) - k**2*so/(self.sa*xd**2) - xa**2/xd**2)
         # return self.L*np.sqrt(D)
         delta_xhat = np.abs(self.estimate_delta_xhat(sa_bc))
-        print(delta_xhat)
-        print(delta_xhat.max())
-        print(delta_xhat.max()*R)
         return np.where(delta_xhat < R*delta_xhat.max())
     
     # def estimate_delta_xhat_full(self, sa_bc):
@@ -471,7 +468,9 @@ class Inversion(ForwardModel):
         # print(f'Denominator 4 : {denom4}')
         # print(f'Metric : {-numer/(denom1 + denom2 + denom3 + denom4)}')
         # print(f'Error ratio : {self.sa/so}')
-        # print(f'Kx : {kL * self.xa_abs}')
-        # print(f'Kx mean : {(kL * self.xa_abs).mean()}')
+        print(U)
+        print(f'K : {kL}')
+        print(f'Kx : {kL * self.xa_abs}')
+        print(f'Kx mean : {(kL * self.xa_abs).mean()}')
 
         return -numer/(denom1 + denom2 + denom3 + denom4)

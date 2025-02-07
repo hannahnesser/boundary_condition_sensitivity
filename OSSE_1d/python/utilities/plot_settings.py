@@ -1,5 +1,5 @@
 # Figure sizes
-SCALE = 2
+SCALE = 1.5
 # PRES_SCALE = 2
 BASE_WIDTH = 5 # previously 10
 BASE_HEIGHT = 4.3 # previously 9

@@ -27,7 +27,7 @@ xt_abs        = 30 # Emissions (ppb/day)
 
 # Prior errors (ppb/day)
 sa            = 0.5
-sa_BC         = 50
+sa_BC         = 10
 
 # Observational errors (ppb)
 so            = 10

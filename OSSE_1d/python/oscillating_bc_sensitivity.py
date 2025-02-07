@@ -30,7 +30,7 @@ if not os.path.exists(plot_dir):
 ## -------------------------------------------------------------------------##
 U = np.concatenate([np.arange(5, 0, -1), 
                     np.arange(1, 5, 1)])*24
-U = np.repeat(U, 2)
+U = np.repeat(U, 2)   
 # U = 5*24
 
 if type(U) in [float, int]:
@@ -56,8 +56,8 @@ pert_std_opt = inv.Inversion(BC=BC_pert_std_v, opt_BC=True, gamma=1, U=U)
 # Test the effect of changed y-intercept, amplitude, frequency, and phase 
 ## -------------------------------------------------------------------------##
 figsize = fp.get_figsize(aspect=2.5, rows=4, cols=7, 
-                         max_width=ps.BASE_WIDTH,
-                         max_height=ps.BASE_HEIGHT)
+                         max_width=ps.BASE_WIDTH/1.5,
+                         max_height=ps.BASE_HEIGHT/1.5)
 fig = plt.figure(figsize=figsize)
 gs = gridspec.GridSpec(4, 7, width_ratios=[1, 0.2, 1, 1, 1, 1, 1])
 ax = []
@@ -75,23 +75,13 @@ ax = np.array(ax).T
 
 fp.add_title(ax[0, 0], 'Boundary condition')
 fp.add_title(ax[0, 1], 
-             'Perturbed posterior\n'
-             'emissions compared to\n'
-             'true posterior emissions')
-fp.add_title(ax[0, 2], 'Predictive metric')
+             'True error')
+fp.add_title(ax[0, 2], 'Preview metric')
 fp.add_title(ax[0, 3], 'Diagnostic metric')
 fp.add_title(ax[0, 4], 
-             'Perturbed posterior\n'
-             'emissions with\n'
-             'correction method\n'
-             'compared to true\n'
-             'posterior emissions')
+             'Boundary method')
 fp.add_title(ax[0, 5], 
-             'Perturbed posterior\n'
-             'emissions with\n'
-             'buffer method\n'
-             'compared to true\n'
-             'posterior emissions')
+             'Buffer method')
 
 ys = np.arange(1900, 1950, 10)
 amps = np.arange(10, 60, 10)
@@ -124,7 +114,7 @@ for j, (label, vals) in enumerate(periodics.items()):
     ax[j, 0].set_ylabel('Boundary\ncondition (ppb)')
 
     # Labels
-    ax[j, 1].set_ylabel(r'$\Delta \hat{x}/\hat{x}_T$')
+    ax[j, 1].set_ylabel(r'$\Delta \hat{x}/\hat{x}_A$')
 
     for i, val in enumerate(vals):
         BC_pert = dc(BC_pert_std)
@@ -149,7 +139,7 @@ for j, (label, vals) in enumerate(periodics.items()):
         firstgrid.append(((pert.xhat - true.xhat)/true.xhat)[0])
         rmse['Standard'][label]['mean_pert'].append(mean_pert)
         rmse['Standard'][label]['rmse'].append(tot_err(pert.xhat[3:], true.xhat[3:]))
-        ax[j, 1].plot(pert.xp, (pert.xhat - true.xhat)/true.xhat, 
+        ax[j, 1].plot(pert.xp, (pert.xhat - true.xhat)/true.xa, 
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         # delta_signal = ((pert.g - true.g) @ (true.y - true.ya))/true.xhat
         # delta_noise = -(pert.g @ (pert.c - true.c))/true.xhat
@@ -163,10 +153,10 @@ for j, (label, vals) in enumerate(periodics.items()):
         # Predicted effect
         print(mean_pert)
         ax[j, 2].plot(pert.xp, 
-                      pert.estimate_delta_xhat(std_pert + mean_pert - 1900)/pert.xa, 
+                      pert.estimate_delta_xhat_2x2(std_pert + mean_pert - 1900), 
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         ax[j, 3].plot(pert.xp,
-                      -(std_pert + mean_pert - 1900)*pert.g.sum(axis=1)/pert.xhat,
+                      -(std_pert + mean_pert - 1900)*pert.g.sum(axis=1)/pert.xa,
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         
         # Optimized BC
@@ -174,7 +164,7 @@ for j, (label, vals) in enumerate(periodics.items()):
         rmse['Correction'][label]['mean_pert'].append(mean_pert)
         rmse['Correction'][label]['rmse'].append(tot_err(pert_opt.xhat, true.xhat))
         ax[j, 4].plot(pert_opt.xp, 
-                      (pert_opt.xhat - true.xhat)/true.xhat, 
+                      (pert_opt.xhat - true.xhat)/true.xa, 
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         # delta_signal = ((pert_opt.g - true.g) @ (true.y - true.ya))/true.xhat
         # delta_noise = -(pert_opt.g @ (pert_opt.c - true.c))/true.xhat
@@ -190,7 +180,7 @@ for j, (label, vals) in enumerate(periodics.items()):
         rmse['Buffer'][label]['mean_pert'].append(mean_pert)
         rmse['Buffer'][label]['rmse'].append(tot_err(pert_sa_BC.xhat, true.xhat))
         ax[j, 5].plot(pert_sa_BC.xp,
-                      (pert_sa_BC.xhat - true.xhat)/true.xhat, 
+                      (pert_sa_BC.xhat - true.xhat)/true.xa, 
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         # delta_signal = ((pert_sa_BC.g - true.g) @ (true.y - true.ya))/true.xhat
         # delta_noise = -(pert_sa_BC.g @ (pert_sa_BC.c - true.c))/true.xhat
@@ -266,5 +256,5 @@ ax.scatter(means, firstgrid, color=fp.color(3), marker='o')
 _, _, r, bias = stats.comparison_stats(np.array(means), np.array(firstgrid))
 print(r**2)
 ax.scatter(stds, firstgrid, color=fp.color(5), marker='^')
-plt.show()
+# plt.show()
 
