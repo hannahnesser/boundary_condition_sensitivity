@@ -9,8 +9,8 @@ clusters : 'StateVector.nc'
 # Inversion variables
 # ---------------------------------------- #
 sa : 0.5
-so : 15
-bc_true : 1850
+# so : 8
+# bc_true : 1900
 
 # ---------------------------------------- #
 # Inversion settings
@@ -28,8 +28,8 @@ height : 4.5 # previously 9
 # Fontsizes
 title_size : 15
 subtitle_size : 13
-label_size : 11
-tick_size : 9
+label_size : 13
+tick_size : 13
 
 # Position
 title_loc : 1

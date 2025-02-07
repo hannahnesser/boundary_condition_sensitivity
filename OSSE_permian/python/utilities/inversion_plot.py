@@ -1,6 +1,6 @@
 from copy import deepcopy as dc
 import numpy as np
-from matplotlib import rcParams
+# from matplotlib import rcParams
 from utilities import format_plots as fp
 from utilities import grid, utils
 
@@ -38,9 +38,9 @@ def plot_state_format(data, default_value=0, cbar=True, **kw):
         kw['vmax'] = kw.get('vmax', data.max())
     kw['add_colorbar'] = False
     cbar_kwargs = kw.pop('cbar_kwargs', {})
-    label_kwargs = kw.pop('label_kwargs', {})
+    # label_kwargs = kw.pop('label_kwargs', {})
     title_kwargs = kw.pop('title_kwargs', {})
-    map_kwargs = kw.pop('map_kwargs', {})
+    # map_kwargs = kw.pop('map_kwargs', {})
     fig_kwargs = kw.pop('fig_kwargs', {})
 
     # Get figure

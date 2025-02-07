@@ -15,11 +15,11 @@ from utilities import utils
 _, config = utils.setup()
 
 # Other font details
-rcParams['font.family'] = 'sans-serif'
-rcParams['font.sans-serif'] = 'AppleGothic'
+# rcParams['font.family'] = 'sans-serif'
+# rcParams['font.sans-serif'] = 'AppleGothic'
 rcParams['font.size'] = config['label_size']*config['scale']
-rcParams['text.usetex'] = True
-rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
+# rcParams['text.usetex'] = True
+# rcParams['text.latex.preamble'] = r'\usepackage{cmbright}'
 rcParams['axes.titlepad'] = config['title_pad']
 
 from matplotlib.font_manager import findfont, FontProperties
@@ -256,7 +256,7 @@ def get_square_limits(xdata, ydata, **kw):
 
     return xlim, ylim, xy, dmin, dmax
 
-def format_map(ax, lats, lons,
+def format_map(ax, lats, lons, lat_delta=0.25, lon_delta=0.3125,
                fontsize=config['tick_size']*config['scale'],
                **gridline_kwargs):
     # Get kwargs
@@ -265,8 +265,8 @@ def format_map(ax, lats, lons,
     gridline_kwargs['linestyle'] = gridline_kwargs.get('linestyle', ':')
 
     # Format
-    ax.set_ylim(min(lats), max(lats))
-    ax.set_xlim(min(lons), max(lons))
+    ax.set_ylim(min(lats) - lat_delta/2, max(lats) + lat_delta/2)
+    ax.set_xlim(min(lons) - lon_delta/2, max(lons) + lon_delta/2)
     ax.add_feature(cf.OCEAN.with_scale('50m'), facecolor='0.98', linewidth=0.5)
     ax.add_feature(cf.LAND.with_scale('50m'), facecolor='0.98', linewidth=0.5)
     ax.add_feature(cf.STATES.with_scale('50m'), edgecolor='0.3', linewidth=0.2,
@@ -307,6 +307,7 @@ def format_cbar(cbar, cbar_title='', horizontal=False, **cbar_kwargs):
 
 def save_fig(fig, loc, name, **kwargs):
     fig.savefig(join(loc, name + '.png'),
-                bbox_inches='tight', dpi=500,
+                bbox_inches='tight', 
+                dpi=500,
                 transparent=True, **kwargs)
     print('Saved %s' % name + '.png')

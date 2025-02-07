@@ -34,7 +34,7 @@ def clusters_1d_to_2d(data, clusters, default_value=0):
     # build a lookup table from data.
     #    data_lookup[0] = default_value (value for cluster 0),
     #    data_lookup[1] = value for cluster 1, and so forth
-    if default_value in clusters.values:  
+    if ~np.any(np.isnan(clusters.values)) or ~np.any(clusters.values == 0):  
         data_lookup = np.append(default_value, data)
     else:
         print('Not using default value.')
@@ -146,45 +146,21 @@ def nearest_loc(data, compare_data):
                      data.reshape(1, -1)).argmin(axis=0)
     return indices
 
-def get_distances(data):
-    '''
-    Get the distance between lat/lon points. It takes as input a
-    tuple of (lat, lon)
-    '''
-    # Technically, this could be sped up by recognizing that any latitude 
-    # point to another latitude has the same distance. It could also be 
-    # sped up by only calculating the lower diagonal
-    data_d, distances = _create_distances_array(data)
-    dist = lambda idx : _get_distance(data_d, idx)
-    distances = distances.apply(dist, axis=1).T
-    distances = distances.map(lambda x: x.km)
-    return distances
-
-def _create_distances_array(data):
-    '''
-    This function takes data in the form of a pandas DataFrame
-    with a lat and lon column, adds a tuple latlon column (required
-    for the get_distance fucntion later on), and creates an empty
-    DataFrame of shape ndata x ndata that will contain the distances
-    between each point and every other point
-    '''
-    # Require that the input is a pandas dataframe
-    if type(data) != pd.core.frame.DataFrame:
-        raise TypeError('Data input is not a pandas dataframe.')
-
-    # Create a lat lon column
-    data_d = data.copy()
-    data_d['latlon'] = list(zip(data_d['lat'], data_d['lon']))
+def distance(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
     
-    # Create an empty dataframe to store the distances between 
-    # each point
-    distances = pd.DataFrame(np.zeros((data_d.shape[0], data_d.shape[0])),
-                             index=data_d.index, columns=data_d.index)
+    All args must be of equal length.    
     
-    return data_d, distances
+    """
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
     
-def _get_distance(data, idx):
-    end_point = data.loc[idx.name, 'latlon']
-    distances = data['latlon'].apply(distance, args=(end_point,),
-                                     ellipsoid='WGS-84')
-    return distances
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    
+    c = 2 * np.arcsin(np.sqrt(a))
+    km = 6378.137 * c
+    return km
