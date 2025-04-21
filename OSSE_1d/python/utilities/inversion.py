@@ -1,12 +1,13 @@
 import numpy as np
 import math
 from copy import deepcopy as dc
-import settings as s
 from utilities import gcpy as gc
+from utilities import utils
+project_dir, config = utils.setup()
 
 class OSSE:
     def __init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t, total_t,
-                 BCt, xt_abs, rs):
+                 BCt, xt_abs, obs_err, rs):
         '''
         Define an inversion object for an OSSE:
             nstate              ...
@@ -72,7 +73,7 @@ class OSSE:
         self.y = (self.forward_model(x=self.xt_abs, 
                                      BC=self.BCt*np.ones(len(self.t)))
                   + np.random.RandomState(rs).normal(
-                        0, 8, (self.nstate, self.nobs_per_cell))).T.flatten()
+                        0, obs_err, (self.nstate, self.nobs_per_cell))).T.flatten()
 
 class ForwardModel(OSSE):
     def forward_model(self, x, BC):
@@ -136,16 +137,32 @@ class ForwardModel(OSSE):
         return y_new
 
 class Inversion(ForwardModel):
-    def __init__(self, nstate=s.nstate, nobs_per_cell=s.nobs_per_cell, 
-                 Cmax=s.Cmax, L=s.L, U=s.U, 
-                 init_t=s.init_t, total_t=s.total_t,
-                 BCt=s.BCt, xt_abs=s.xt_abs,
-                 xa_abs=None, sa=s.sa, sa_BC=s.sa_BC, so=s.so, 
-                 gamma=None, k=None, BC=None,
-                 opt_BC=False, opt_BC_n=1, sequential=False, rs=s.random_state):
+    def __init__(
+            self, 
+            nstate=config['nstate'], 
+            nobs_per_cell=config['nobs_per_cell'], 
+            Cmax=config['Cmax'], 
+            L=config['L'], 
+            U=config['U'], 
+            init_t=config['init_t'],
+            total_t=config['total_t'],
+            BCt=config['BCt'], 
+            xt_abs=config['xt_abs'], 
+            obs_err=config['obs_err'],
+            xa_abs=None, 
+            sa=config['sa'], 
+            sa_BC=config['sa_BC'], 
+            so=config['so'], 
+            gamma=None, 
+            k=None, 
+            BC=None,
+            opt_BC=False, 
+            opt_BC_n=1, 
+            sequential=False, 
+            rs=config['random_state']):
         # Inherit from the parent class
         OSSE.__init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t,
-                      total_t, BCt, xt_abs, rs)
+                      total_t, BCt, xt_abs, obs_err, rs)
         
         # Prior
         if xa_abs is None:
@@ -320,6 +337,7 @@ class Inversion(ForwardModel):
         self.a = np.identity(len(xa)) - self.shat @ sa_inv
         self.xhat = (xa + self.g @ (y - k @ xa - c))
         self.yhat = k @ self.xhat + c
+        # print(f'  Prior cost function : {self.cost_prior():.2f} (n={self.xhat.shape})')
 
     def get_gamma(self, tol=1e-1):
         print('Finding gamma...')
@@ -373,9 +391,11 @@ class Inversion(ForwardModel):
 
             self.xhat_BC = self.xhat[-opt_BC_n:]
             self.xhat = self.xhat[:-opt_BC_n]
-            
+
+            self.shat_full = self.shat
             self.shat = self.shat[:-opt_BC_n, :-opt_BC_n]
 
+            self.a_full = self.a
             self.a_BC = self.a[-opt_BC_n:, -opt_BC_n:]
             self.a = self.a[:-opt_BC_n, :-opt_BC_n]
 
@@ -394,83 +414,109 @@ class Inversion(ForwardModel):
         # return self.L*np.sqrt(D)
         delta_xhat = np.abs(self.estimate_delta_xhat(sa_bc))
         return np.where(delta_xhat < R*delta_xhat.max())
-    
-    # def estimate_delta_xhat_full(self, sa_bc):
-    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-    #     xD = np.cumsum(self.xa_abs)
-    #     sa_xD
-    #     numer = (self.L**2*np.abs(self.U).mean()**3*sa_bc
-    #              *(self.sa**0.5).mean()**2
-    #              *(self.so**0.5).mean()**2
-    #              *self.xa_abs)
-    #     denom = (D**3*(self.sa**0.5*xD).mean()**2
-    #              *(self.L**2*(self.sa**0.5*self.xa_abs).mean()**2 
-    #                + np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
-    #              + D**2*self.L*np.abs(self.U).mean()**2)
 
-    # This works adequately, commenting it out to try something else
-    # def estimate_delta_xhat(self, sa_bc):
-    #     # k = np.abs(self.U).mean()/self.L
-    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-    #     xD = np.append(0, np.cumsum(self.xa_abs))[:-1]
-    #     numer = self.L*np.abs(self.U).mean()*sa_bc*self.sa*self.xa_abs
-    #     denom = (self.sa*(D**2*xD**2 + self.L**2*self.xa_abs**2) + 
-    #              np.abs(self.U).mean()**2*(self.so**0.5).mean()**2)
-    #     return -numer/denom
-
-    def estimate_delta_xhat(self, sa_bc):
-        D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-        xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
-        U = np.abs(self.U).mean()
-        so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
-
-        kL = self.L/U
-        kD = D/U
-
-        numer = kL*self.sa*self.xa_abs*sa_bc # Not xa_abs^2 because we want relative change
-        denom = (self.sa*(kD**2*xD**2 + kL**2*self.xa_abs**2) + so)
-        # m2 ppb2/hr2
-        
-        # # Calculate covariance
-        # cov_xD = self.L**2*self.sa**2*self.xa_abs**2 + U**2*self.sa*so
-        # # m2 ppb2/hr2
-        # cov_x = D**2*self.sa**2*xD**2 + U**2*self.sa*so # m2 ppb2/hr2
-        # cov_xxD = -D*self.L*self.sa**2*self.xa_abs*xD
-
-        return -numer/denom #, cov_xD/denom, cov_x/denom, cov_xxD/denom
+    # def preview_1d(self, sa_bc):
+    #     U = np.abs(self.U).mean()
+    #     k = self.L/U*np.tril(np.ones((self.nstate, self.nstate)))*self.xa_abs.mean()
+    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2 # individual 
+    #     so_inv = np.diag(1/(so*np.ones(self.nstate)))
+    #     g = np.linalg.inv(np.diag(1/self.sa) + k.T @ so_inv @ k) @ k.T @ so_inv
+    #     return -sa_bc*g.sum(axis=1)/self.xa
 
     # This is using the full 2x2 example, but it generates an estimate that is
     # too low
-    def estimate_delta_xhat_2x2(self, sa_bc):
-        # U = np.abs(self.U).mean()
-        # D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-        # so = (self.so**0.5).mean()**2
-        # xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
-        D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-        xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
-        U = np.abs(self.U).mean()
-        so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
-        # xA = np.mean(self.xa_abs)*np.ones(len(self.xa_abs))
+    def preview_2d(self, sa_bc):
+        # Transport
+        D = np.arange(self.L, self.L*self.nstate + self.L, self.L)
+        j = D/self.L
+        U = self.U.mean()
+        k_i = self.L/U
+        k_up = (D/U)[:-1]
 
-        kL = self.L/U
-        kD = D/U
+        # Prior and prior uncertainty
+        sa_i = (self.xa_abs**2*self.sa)[1:]
+        sa_up = (np.cumsum(self.xa_abs)**2*self.sa)[:-1]
+        # print(self.xa_abs)
+        # print(self.xa_abs[1:])
+        # print(np.cumsum(self.xa_abs))
 
-        numer = self.L * sa_bc * kL * self.sa * so * self.xa_abs
-        denom1 = D * kD**2 * kL**2 * self.sa**2 * self.xa_abs**2 * xD**2
-        denom2 = (D + self.L) * kD**2 * self.sa * so * xD**2
-        denom3 = self.L * kL**2 * self.sa * so * self.xa_abs**2
-        denom4 = self.L * so**2
+        # Observing system errors 
+        so_i = ((self.so.mean()/self.nobs_per_cell)**0.5)**2 # individual 
+        so_up = (so_i/j)[:-1]
 
-        # print(f'Numerator : {numer}')
-        # print(f'Denominator 1 : {denom1}')
-        # print(f'Denominator 2 : {denom2}')
-        # print(f'Denominator 3 : {denom3}')
-        # print(f'Denominator 4 : {denom4}')
-        # print(f'Metric : {-numer/(denom1 + denom2 + denom3 + denom4)}')
-        # print(f'Error ratio : {self.sa/so}')
-        print(U)
-        print(f'K : {kL}')
-        print(f'Kx : {kL * self.xa_abs}')
-        print(f'Kx mean : {(kL * self.xa_abs).mean()}')
+        # Secondary quantitites
+        R_i = so_i/(k_i**2*sa_i)
+        R_up = so_up/(k_up**2*sa_up)
+        beta = j[1:]**2*sa_up/sa_i + 1
+        
+        # Predict error
+        delta_xhat_0 = (sa_bc/k_i)/(1 + R_i[0])
+        delta_xhat = (sa_bc/k_i)*R_up/(R_up*R_i + R_i + beta*R_up + 1)
 
-        return -numer/(denom1 + denom2 + denom3 + denom4)
+        # While we're at it, we'll estimate an influence length scale using
+        # the 1D approximation
+        so_mean = (np.mean(so_i**0.5)**2)
+        sa = np.mean(self.sa**0.5)**2*np.mean(self.xa_abs)**2
+
+        # print('Estimating R')
+        # print(f'  Mean K : {np.mean(k_i):.2f}')
+        # print(f'  Mean sa : {sa**0.5:.2f}')
+        # print(f'  Mean so : {so_mean**0.5}')
+        # print(f'  R : {so_mean/(np.mean(k_i)**2*sa):.2f}')
+        R = so_mean/(np.mean(k_i)**2*sa)
+
+        return - np.append(delta_xhat_0, delta_xhat)/self.xa_abs, R
+        
+        # kx_i = k_i * self.xa_abs
+        # kx_up = k_up * x_up
+        # sa_so_up = self.sa / so_up
+        # so_i_so_up = so / so_up
+        # so_i_sa = so / self.sa
+
+        # num = (sa_bc * kx_i)
+        # den = kx_up**2 * ( sa_so_up * kx_i**2 + so_i_so_up + 1 ) + kx_i**2 + so_i_sa
+        # delta_xhat = - num / den
+
+        # return delta_xhat
+
+    def estimate_p(self, sa_bc):
+        try: 
+            Umin = self.U.min()
+            Umax = self.U.max()
+        except:
+            Umin = self.U
+            Umax = self.U
+        rat_min = (sa_bc/((self.L/Umin)*self.sa.mean()**0.5*self.xa_abs.max()))**2
+        rat_max = (sa_bc/((self.L/Umax)*self.sa.mean()**0.5*self.xa_abs.min()))**2
+        return (rat_min + 1)**0.5, (rat_max + 1)**0.5
+
+    # def estimate_delta_xhat(self, sa_bc):
+    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
+    #     xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
+    #     U = np.abs(self.U).mean()
+    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
+
+    #     kL = self.L/U
+    #     kD = D/U
+
+    #     numer = kL*self.sa*self.xa_abs*sa_bc # Not xa_abs^2 because we want relative change
+    #     denom = (self.sa*(kD**2*xD**2 + kL**2*self.xa_abs**2) + so)
+    #     # m2 ppb2/hr2
+        
+    #     # # Calculate covariance
+    #     # cov_xD = self.L**2*self.sa**2*self.xa_abs**2 + U**2*self.sa*so
+    #     # # m2 ppb2/hr2
+    #     # cov_x = D**2*self.sa**2*xD**2 + U**2*self.sa*so # m2 ppb2/hr2
+    #     # cov_xxD = -D*self.L*self.sa**2*self.xa_abs*xD
+
+    #     return -numer/denom #, cov_xD/denom, cov_x/denom, cov_xxD/denom
+
+    # def estimate_avker(self):
+    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
+    #     U = np.abs(self.U).mean()
+    #     kL = self.L/U
+    #     a_est = self.sa / (self.sa + so/kL**2)
+    #     return a_est
+
+    # def estimate_a():
+    #     k_est = np.ones()

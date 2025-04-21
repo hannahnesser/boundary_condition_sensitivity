@@ -1,0 +1,33 @@
+## Standard inversion settings
+# Random state
+random_state  : 572 #472 #372 #872
+# rs = np.random.RandomState(random_state)
+
+# Inversion dimensions
+nstate : 20
+nobs_per_cell : 50
+
+# Courant number
+Cmax : 1
+
+# Grid cell length (km)
+L : 25
+
+# Wind speed (5 m/s = 432 km/day)
+U : 432
+
+# Times (150/300 hrs = 6.25/12.5 day)
+init_t : 6.25
+total_t: 12.5
+
+# True quantities
+BCt : 1900 # Boundary condition (ppb)
+xt_abs : 30 # Emissions (ppb/day)
+obs_err : 8 # True observation error (ppb)
+
+# Prior errors (ppb/day)
+sa: 0.5
+sa_BC : 10
+
+# Observational errors (ppb)
+so : 10

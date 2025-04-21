@@ -23,6 +23,7 @@ def rma_modified(xdata, ydata):
     return slope
 
 def rma(xdata, ydata):
+    print(xdata.shape, ydata.shape)
     _, _, r, _ = comparison_stats(xdata, ydata)
     slope = np.sign(r)*ydata.std()/xdata.std()
     return slope

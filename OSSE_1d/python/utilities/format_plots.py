@@ -4,6 +4,7 @@ from collections import OrderedDict
 from os.path import join
 
 # Plotting
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import rcParams, colors
 from matplotlib.colors import LinearSegmentedColormap
@@ -32,15 +33,21 @@ def cmap_from_color(color_high, color_low=(1, 1, 1), N=100):
     cmap = colors.LinearSegmentedColormap.from_list('cmap', rgb_map, N=N)
     return cmap
 
-def cmap_trans(cmap, ncolors=300, nalpha=20):
-    color_array = plt.get_cmap(cmap)(range(ncolors))
+def cmap_trans(cmap, ncolors=300, nalpha=20, set_bad=None, reverse=False):
+    color_array = mpl.colormaps.get_cmap(cmap)(range(ncolors))
 
     # change alpha values
     color_array[:,-1] = np.append(np.linspace(0.0, 1.0, nalpha),
                                   np.ones(ncolors-nalpha))
+    if reverse:
+        color_array = color_array[::-1, :]
 
     # create a colormap object
-    map_object = LinearSegmentedColormap.from_list(name=str(cmap) + '_trans',colors=color_array)
+    map_object = LinearSegmentedColormap.from_list(
+        name=str(cmap) + '_trans',colors=color_array)
+
+    if set_bad is not None:
+        map_object.set_bad(color=set_bad)
 
     return map_object
 
