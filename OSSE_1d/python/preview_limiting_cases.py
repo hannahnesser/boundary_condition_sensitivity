@@ -180,45 +180,175 @@ if not os.path.exists(plot_dir):
 #               eff_sa_i_so_up)
 # ax[2].scatter((100*sas[:, None]**0.5/sos[None, :]**0.5),
 #               eff_sa_i_so_i)
-
+#%%
 
 from matplotlib import cm
-
-def preview_1d(sa_bc, k, sa, so, n=20):    
+n = 10
+def preview_1d(sa_bc, k, sa, so, n=n):
     # Define secondary variables
-    R = (so/(k*sa))**2
-    k = k*np.tril(np.ones((n, n)))
-    so_inv = np.diag(1/(so**2*np.ones(n)))
-    sa_inv = np.diag(1/(sa**2*np.ones(n)))
+    # R = (so/(k*sa))**2
+    k = k*np.tril(np.ones((n, n))) # ppb/flux
+    so_inv = np.diag(1/(so**2*np.ones(n))) # 1/ppb2
+    sa_inv = np.diag(1/(sa**2*np.ones(n))) # 1/flux2
     g = np.linalg.inv(sa_inv + k.T @ so_inv @ k) @ k.T @ so_inv
-    return -sa_bc*g.sum(axis=1)
+    return -g.sum(axis=1) # Normalized by delta_c
 
-def lower_bound(sa_bc, k, R=1e-10, n=20):
+def R_gt_one(sa_bc, k, R=1e-10, n=n):
     j = np.arange(1, n + 1)
-    return -(sa_bc/k)*R**(j - 1)
+    return -(1/k)*R**(1 - j) # Normalized by delta_c
 
-def upper_bound(sa_bc, k, R=1e10, n=20):
+def R_lt_one(sa_bc, k, R=1e10, n=n):
     j = np.arange(1, n + 1)
-    print(n - j + 1)
-    return -(sa_bc/k)*R**(-1)*(n - j + 1)
+    return -(1/k)*R*(n - j + 1) # Normalized by delta_c
 
-ks = np.arange(0.05, 2, 0.1)
+true_BC = inv.Inversion(gamma=1, nstate=n)
+tau_k = true_BC.tau # day
+delta_c = 1
+xa = 25
+sa = (xa*0.5)**2 # ppb/day
+so = 10**2 # ppb
+R_base = (tau_k**2*sa)/so
+print(R_base)
+
+fig, ax = fp.get_figax(rows=2, aspect=1.5, max_width=4, max_height=4, 
+                       sharey=True, sharex=False, height_ratios=[0.5, 1])
+xs = np.arange(1, n + 1)
+fp.add_title(ax[0], 'BC-induced posterior error for\ninversions with constant parameters',
+             y=1.1)
+
+R_lt = R_lt_one(delta_c, k=tau_k, R=1*R_base)
+R_lt_sum = 100*np.sum(R_lt)/(xa*n)
+ax[0].plot(xs + 0.5, R_lt/xa*100, color=fp.color(3, cmap='Grays', lut=7), lw=2,
+           ls=':', label=r'R $\ll$ 1')#, $Total error$ = $'f'{R_lt_sum:.2f} %)')
+# ax[0].plot(xs + 0.5, preview_1d(delta_c, tau_k, sa, so/1, n)/xa*100, 
+#            color=fp.color(3, cmap='Greens', lut=7), lw=2, ls='--',
+#            label=r'Preview')#, $Total error$ = $'f'{R_lt_sum:.2f} %)')
+
+n_gt = 5e4
+R_gt = R_gt_one(delta_c, k=tau_k, R=n_gt*R_base)
+R_gt_sum = 100*np.sum(R_gt)/(xa*n)
+ax[0].plot(xs + 0.5, R_gt/xa*100, color=fp.color(5, cmap='Grays', lut=7), lw=2,
+           ls=':', label=r'R $\gg$ 1')#, $Total error$ = $'f'{R_gt_sum:.2f} %)')
+# ax[0].plot(xs + 0.5, preview_1d(delta_c, tau_k, sa, so/n_gt, n)/xa*100, 
+#            color=fp.color(5, cmap='Greens', lut=7), lw=2, ls='--',
+#            label=r'Preview')#, $Total error$ = $'f'{R_lt_sum:.2f} %)')
+
+ax[0].set_ylim(-25, 2.5)
+
+ax[0].set_xticks(xs + 0.5)
+ax[0].set_xticklabels(xs, fontsize=ps.TICK_FONTSIZE*ps.SCALE)
+ax[0].set_xlim(1, n + 1)
+for j in range(21):
+    ax[0].axvline(j + 1, c=fp.color(1, lut=11), alpha=0.2, ls=':', lw=0.5)
+
+fp.add_labels(ax[0], 'Grid cells from upwind boundary', 
+              'BC-induced error\n'r'[% ppb$^{-1}$]')
+
 Rs = []
 prevs = []
-kk = 0.4
-for sasa in np.arange(0.1, 2.25, 0.25): # Assuming xa = 30
-    for soso in np.arange(5, 21, 2):
-        Rs.append((soso/(kk*sasa*30))**2)
-        prevs.append(preview_1d(10, kk, sasa*30, soso))
+tot_err = []
+for sasa in np.arange(0.1, 20, 0.25): # Assuming xa = xa
+    for soso in np.arange(1, 21, 2):
+        Rs.append(1/((soso/(tau_k*sasa*25))**2))
+        prev_i = preview_1d(delta_c, tau_k, sasa*25, soso)
+        prevs.append(prev_i/xa*100)
+        tot_err.append(100*(np.sum(prev_i)/(xa*n)))
 
-Rs = np.array(Rs)
-prevs = np.array(prevs)
+x = np.array(Rs)
+idx = np.argsort(x)
+for i in range(n):
+    y = np.array([p[i] for p in prevs])
+    if i == 5:
+        label = 'Grid cell error'
+    else:
+        label = None
+    ax[1].plot(x[idx], y[idx], color=fp.color(i, lut=n + 1, cmap='plasma'),
+               lw=0.5, label=label)
 
-fig, ax = fp.get_figax()
-for i in range(prevs.shape[0]):
-    ax.plot(np.arange(1, 21), prevs[i, :], c=cm.hot(Rs[i]/Rs.max()))
-ax.plot(np.arange(1, 21), -lower_bound(10, k=kk, R=Rs.min()), color='red')
-ax.plot(np.arange(1, 21), -upper_bound(10, k=kk, R=Rs.max()), color='blue')
+# ax1 = ax[1].twinx()
+# ax1.plot(x[idx], np.array(tot_err)[idx], 
+#          color='lightgrey', lw=2, ls='-', label='Total error')
+ax[1].plot(x[idx], np.array(tot_err)[idx], 
+         color='black', lw=2, ls='-', label='Total error')
+# ax1.set_ylim(-8, 0.8)
+# point1 = np.array(tot_err)[idx][np.argmin(np.abs(x - 1*R_base))]
+# point2 = np.array(tot_err)[idx][np.argmin(np.abs(x - n_gt*R_base))]
+# ax1.scatter(1*R_base, R_lt_sum, 
+#             color=fp.color(3, cmap='Grays', lut=7), s=50, marker='o')
+# ax1.scatter(n_gt*R_base, R_gt_sum, 
+#             color=fp.color(5, cmap='Grays', lut=7), s=50, marker='o') 
+# fp.add_labels(ax1, '', 'Total error [% ppb$^{-1}$]')
 
-# ax.plot(upper_bound(10, k=ks[0], R=Rs[0]), color='blue')
+import matplotlib as mpl
+cmap = mpl.colormaps['plasma'].resampled(n + 1)
+cmap = mpl.colors.ListedColormap(cmap(np.linspace(0, 1, n + 1)))
+bounds = np.arange(1, n + 2)
+norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+cax = fp.add_cax(fig, ax[1], cbar_pad_inches=1.3, horizontal=True)
+cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax,
+                  ticks=((bounds[:-1] + bounds[1:])/2), 
+                  orientation='horizontal')
+cb.ax.set_xticklabels([f'{m:d}' for m in range(1, n + 1)])
+cb.ax.minorticks_off()
+fp.format_cbar(cb, cbar_title='Grid cells from\nupwind boundary',
+               horizontal=True)
+
+ax[1].set_xscale('log')
+ax[1].set_xlim(0.33*R_base, (n_gt*3)*R_base)
+ax[1].axvline(1*R_base, lw=2, color=fp.color(3, cmap='Grays', lut=7), ls=':',
+              label=r'$R \ll 1$')
+ax[1].text(1*R_base + 0.00125, -25, r'$R \ll 1$', va='bottom', ha='left')
+
+
+ax[1].axvline(n_gt*R_base, lw=2, color=fp.color(5, cmap='Grays', lut=7), ls=':',
+              label=r'$R \gg 1$')
+ax[1].text(n_gt*R_base - 30, -25, r'$R \gg 1$', va='bottom', ha='right')
+
+ax[1].axvline(1, lw=1, color='0.5', ls='--')
+ax[1].text(1.2, -25, r'$R = 1$', va='bottom', ha='left')
+fp.add_labels(ax[1], r'Information ratio $R$ [unitless]',
+              'BC-induced error 'r'[% ppb$^{-1}$]')
+
+fp.add_legend(ax[1], bbox_to_anchor=(0.5, -0.35), loc='center', ncol=2)
+
+ax[0].text(0.025, 0.85, '(a)', fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+           transform=ax[0].transAxes, ha='left', va='bottom')
+ax[1].text(0.025, 0.925, '(b)', fontsize=ps.LABEL_FONTSIZE*ps.SCALE,
+           transform=ax[1].transAxes, ha='left', va='bottom')
+
+
+ax[1].axhline(-6.912, lw=1, color='0.5', ls='--')
+# fp.add_legend(ax[0], loc='lower right')
+
+
+fig.subplots_adjust(hspace=0.4)
+
+fp.save_fig(fig, plot_dir, 'limiting_analysis_2')
+
 # %%
+# import matplotlib as mpl
+# cmap = mpl.colormaps['Grays'].resampled(7)
+# cmap = mpl.colors.ListedColormap(cmap(np.linspace(0, 1, 7)[2:]))
+# bounds = np.arange(1, 10 + 2, 2)*R_base
+# norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+# cax = fp.add_cax(fig, ax[0], horizontal=True, cbar_pad_inches=0.75)
+# cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+#                   cax=cax, orientation='horizontal',
+#                   ticks=(bounds[:-1] + bounds[1:])/2)
+# cb.ax[0].set_xticklabels([f'{m*R_base:.3f}' for m in range(1, 10, 2)])
+# fp.format_cbar(cb, cbar_title=r'R [unitless]', horizontal=True)
+
+# for i, m in enumerate(range(500, 1500, 200)):
+#     ax[1].plot(xs + 0.5, R_gt_one(delta_c, k=tau_k, R=m*R_base)/delta_c, 
+#                color=fp.color(i + 2, cmap='Grays', lut=7), lw=2)
+#     ax[1].plot(xs + 0.5, preview_1d(delta_c, k=tau_k, sa=sa, so=so/m)/delta_c, 
+#                    color=fp.color(i + 2, cmap='Grays', lut=7), lw=3, ls='--')
+
+# bounds = np.round(np.arange(500, 1500 + 200, 200)*R_base, 2)
+# norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+# cax = fp.add_cax(fig, ax[1], horizontal=True, cbar_pad_inches=0.75)
+# cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+#                   cax=cax, orientation='horizontal', 
+#                   ticks=(bounds[:-1] + bounds[1:])/2)
+# cb.ax[0].set_xticklabels([f'{m*R_base:.2f}' for m in range(500, 1500, 200)])
+# fp.format_cbar(cb, cbar_title=r'R [unitless]', horizontal=True)

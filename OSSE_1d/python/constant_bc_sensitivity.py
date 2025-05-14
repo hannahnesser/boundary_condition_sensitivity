@@ -43,7 +43,7 @@ Us = {'Constant' : 5*24*60*60/1000, 'Variable' : U}
 
 for i, (wind_name, U) in enumerate(Us.items()):
     fp.add_title(ax[i], f'{wind_name}''\nwind speed')
-    print('-'*70)
+    print('-'*70) 
     print(wind_name)
 
     # BC perturbations
@@ -51,7 +51,7 @@ for i, (wind_name, U) in enumerate(Us.items()):
     # posterior solution 
     true_BC = inv.Inversion(U=U, gamma=1)
     print(true_BC.nobs)
-    pert_BC = inv.Inversion(U=U, gamma=1, BC=true_BC.BCt + pert)
+    pert_BC = inv.Inversion(U=U, gamma=1, BC=true_BC. BCt + pert)
     print(f'  Average wind speed : {true_BC.U.mean()}')
     print(f'  DOFS: {np.trace(true_BC.a)}')
 
@@ -64,8 +64,8 @@ for i, (wind_name, U) in enumerate(Us.items()):
     rrmse_true = ((pert_BC.xhat - true_BC.xhat)**2).mean()**0.5/pert_BC.xa.mean()/pert
     ax[i].plot(
         pert_BC.xp, 100*(pert_BC.xhat - true_BC.xhat)/true_BC.xa/pert,
-        color='grey' , lw=5, label=f'True error')
-    # ax[i].text(0.95, 0.65, f'RRMSE:', color='black',
+        color='grey' , lw=5, label=f'No correction method')
+    # ax[i].text(0.95, 0.65, f'RRMSE:', color='black', Z
     #            transform=ax[i].transAxes, ha='right', va='bottom')
     # ax[i].text(0.95, 0.55, f'{rrmse_true:.2f}', color='grey',
     #            transform=ax[i].transAxes, ha='right', va='bottom')
@@ -77,9 +77,10 @@ for i, (wind_name, U) in enumerate(Us.items()):
     #             zorder=20,
     #             label='1D preview metric')
 
-    rrmse_preview = (pert_BC.preview_2d(pert)**2).mean()**0.5/pert_BC.xa.mean()/pert
+    prev, R = pert_BC.preview_2d(pert)
+    rrmse_preview = (prev**2).mean()**0.5/pert_BC.xa.mean()/pert
     ax[i].plot(pert_BC.xp - 0.04,
-                100*pert_BC.preview_2d(pert)/pert,
+                100*prev/pert,
                 color=fp.color(4, cmap='plasma'), lw=4, ls=':', 
                 zorder=20,
                 label='Preview')
@@ -115,7 +116,8 @@ for i, (wind_name, U) in enumerate(Us.items()):
     print(f'  Boundary condition correction: {pert_opt_BC.xhat_BC}')
     rrmse_boundary = ((pert_opt_BC.xhat - true_BC.xhat)**2).mean()**0.5/pert_opt_BC.xa.mean()/pert
     ax[i].plot(
-        pert_opt_BC.xp, 100*(pert_opt_BC.xhat - true_BC.xhat)/true_BC.xa/pert, 
+        pert_opt_BC.xp - 0.05, 
+        100*(pert_opt_BC.xhat - true_BC.xhat)/true_BC.xa/pert, 
         color=fp.color(3, cmap='viridis'), lw=4, ls='--',
         label=f'Boundary method')
     # ax[i].text(0.95, 0.25, f'{rrmse_boundary:.2f}', 
@@ -134,17 +136,24 @@ for i, (wind_name, U) in enumerate(Us.items()):
     # ax3.set_ylim(-0.05, 0.05)
     # sfs = np.array([1, 5, 10, 50, 100])
     # for i, sf in enumerate(sfs):
-    p = pert_BC.estimate_p(pert)
-    print('Buffer method :')
-    print(f'  Range of p values (buffer scaling): {p}')
-    sa_sf = dc(true_BC.sa)
-    sa_sf[0] *= p[-1]**2
+    # p = pert_BC.estimate_p(pert)
+    # print('Buffer method :')
+    # print(f'  Range of p values (buffer scaling): {p}')
+    # sa_sf = dc(true_BC.sa)
+    # sa_sf[0] *= p**2
     pert_sa_BC = inv.Inversion(
-        U=U, sa=sa_sf, BC=true_BC.BCt + pert, gamma=1, opt_BC=False)
+        U=U, BC=true_BC.BCt + pert, gamma=1, opt_BC=False, buffer=True)
+    print(pert_sa_BC.xhat_buffer)
+    print(len(pert_sa_BC.xa_abs))
+    print(pert_sa_BC.xa_abs)
     rrmse_buffer = ((pert_sa_BC.xhat - true_BC.xhat)**2).mean()**0.5/pert_sa_BC.xa.mean()/pert
     # print('Buffer method prior cost: ', pert_sa_BC.cost_prior())
+    print(pert_sa_BC.sa)
+    print(pert_sa_BC.xa)
+    print(pert_sa_BC.xhat)
     ax[i].plot(
-        pert_sa_BC.xp, 100*(pert_sa_BC.xhat - true_BC.xhat)/true_BC.xa/pert, 
+        pert_sa_BC.xp[:-1] + 0.05, 
+        100*(pert_sa_BC.xhat - true_BC.xhat)/true_BC.xa/pert, 
         color=fp.color(7, cmap='plasma'), lw=4, ls='--',
         label='Buffer method')
     # ax[i].text(0.95, 0.15, f'{rrmse_buffer:.2f}', 
@@ -202,19 +211,20 @@ handles.extend(blank_handle)
 labels.extend(blank_label)
 
 # Reorder
-reorder = [-1, 0, 1,
-           -1, 2, 3]
-        #    -1, 3, 4]
+# reorder = [-1, 0, 1,
+#            -1, 2, 3]
+#         #    -1, 3, 4]
+reorder = [1, -1, -1, 0, 2, 3]
 
 handles = [handles[i] for i in reorder]
 labels = [labels[i] for i in reorder]
 # labels[3] = 'Error estimates : '
-labels[3] = 'Correction methods : '
+labels[2] = 'BC-induced error: '
 
 ax[0].legend(handles=handles, labels=labels,
-             loc='upper center', alignment='center',  
-             bbox_to_anchor=(0.5, -0.2), bbox_transform=fig.transFigure,
-             ncol=2, handlelength=2, frameon=False, 
+             loc='center left', alignment='center',  
+             bbox_to_anchor=(0.95, 0.5), bbox_transform=fig.transFigure,
+             ncol=1, handlelength=2, frameon=False, 
              fontsize=ps.LABEL_FONTSIZE*ps.SCALE) 
 plt.subplots_adjust(hspace=0.05)
 ax[0].set_ylim(-0.25*100, 0.025*100)

@@ -7,7 +7,7 @@ project_dir, config = utils.setup()
 
 class OSSE:
     def __init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t, total_t,
-                 BCt, xt_abs, obs_err, rs):
+                 BCt, xt_abs, obs_err, buffer, rs):
         '''
         Define an inversion object for an OSSE:
             nstate              ...
@@ -70,10 +70,13 @@ class OSSE:
         self.y0 = self.BCt + np.cumsum(self.xt_abs/self.j)
 
         # Pseudo observations
+        y_err = np.random.RandomState(rs).normal(
+            0, obs_err, (self.nstate, self.nobs_per_cell))
+        if buffer:
+            y_err = np.vstack([y_err[-1, :], y_err[:-1, :]])
         self.y = (self.forward_model(x=self.xt_abs, 
                                      BC=self.BCt*np.ones(len(self.t)))
-                  + np.random.RandomState(rs).normal(
-                        0, obs_err, (self.nstate, self.nobs_per_cell))).T.flatten()
+                  + y_err).T.flatten()
 
 class ForwardModel(OSSE):
     def forward_model(self, x, BC):
@@ -158,11 +161,14 @@ class Inversion(ForwardModel):
             BC=None,
             opt_BC=False, 
             opt_BC_n=1, 
+            buffer=False,
             sequential=False, 
             rs=config['random_state']):
         # Inherit from the parent class
+        if buffer:
+            nstate += 1
         OSSE.__init__(self, nstate, nobs_per_cell, Cmax, L, U, init_t,
-                      total_t, BCt, xt_abs, obs_err, rs)
+                      total_t, BCt, xt_abs, obs_err, buffer, rs)
         
         # Prior
         if xa_abs is None:
@@ -171,6 +177,9 @@ class Inversion(ForwardModel):
                     loc=25, scale=5, size=(self.nstate,)))
         else:
             self.xa_abs = xa_abs
+        
+        if buffer:
+            self.xa_abs = np.append(self.xa_abs[-1], self.xa_abs[:-1])
 
         # Relative prior
         self.xa = np.ones(self.nstate)
@@ -206,6 +215,13 @@ class Inversion(ForwardModel):
         # only)
         self.sequential = sequential
 
+        # Boolean for whether to use the buffer grid cell
+        self.buffer = buffer
+        if self.buffer:
+            self.p = self.estimate_p(sa_BC)
+            # print('  Buffer scale factor : ', self.p)
+            self.sa[0] *= self.p**2
+
         # Prior model simulation
         self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).T.flatten()
         # print(self.ya)
@@ -223,6 +239,7 @@ class Inversion(ForwardModel):
         self.solve_inversion()
         self.calculate_BC_bias_metrics()
         self.remove_BC_elements()
+        self.remove_buffer_elements()
 
     def _expand_inversion_for_BC(self, sa_BC):
         # Define dummy variable for longer nstate
@@ -405,6 +422,27 @@ class Inversion(ForwardModel):
             self.bc_contrib = self.bc_contrib[:-opt_BC_n]
             self.xa_contrib = self.xa_contrib[:-opt_BC_n]
 
+    def remove_buffer_elements(self):
+        if self.buffer:
+            self.xhat_buffer = self.xhat[0]
+            self.xhat = self.xhat[1:]
+
+            self.shat_full = self.shat
+            self.shat = self.shat[1:, 1:]
+
+            self.sa_full = self.sa
+            self.sa = self.sa[1:]
+
+            self.a_full = self.a
+            self.a_BC = self.a[0, 0]
+            self.a = self.a[1:, 1:]
+
+            self.g_BC = self.g[0, :]
+            self.g = self.g[1:, :]
+            
+            # self.bc_contrib = self.bc_contrib[1:]
+            # self.xa_contrib = self.xa_contrib[1:]
+
     def estimate_D(self, sa_bc, R):
         # k = np.abs(self.U).mean()/self.L
         # xa = self.xa_abs
@@ -464,6 +502,7 @@ class Inversion(ForwardModel):
         # print(f'  Mean so : {so_mean**0.5}')
         # print(f'  R : {so_mean/(np.mean(k_i)**2*sa):.2f}')
         R = so_mean/(np.mean(k_i)**2*sa)
+        print('  R : ', 1/R)
 
         return - np.append(delta_xhat_0, delta_xhat)/self.xa_abs, R
         
@@ -486,9 +525,21 @@ class Inversion(ForwardModel):
         except:
             Umin = self.U
             Umax = self.U
-        rat_min = (sa_bc/((self.L/Umin)*self.sa.mean()**0.5*self.xa_abs.max()))**2
-        rat_max = (sa_bc/((self.L/Umax)*self.sa.mean()**0.5*self.xa_abs.min()))**2
-        return (rat_min + 1)**0.5, (rat_max + 1)**0.5
+        tau_min = self.L/Umax
+        tau_max = self.L/Umin
+        sa_min = (self.sa**0.5*self.xa_abs).min()**2
+        sa_max = (self.sa**0.5*self.xa_abs).max()**2
+        R_min = tau_min**2*sa_min/self.so.max()*self.nobs_per_cell
+        R_max = tau_max**2*sa_max/self.so.max()*self.nobs_per_cell
+        R_sqrt_min = np.minimum(np.sqrt(R_min + 2), np.sqrt(R_max + 2))
+        R_sqrt_max = np.maximum(np.sqrt(R_min + 2), np.sqrt(R_max + 2))
+        p_min = sa_bc/(tau_max*sa_max*R_sqrt_max)
+        p_max = sa_bc/(tau_min*sa_min*R_sqrt_min)
+        print('  Buffer scale factor : ', p_min, p_max)
+        return p_max
+        # rat_min = (sa_bc/((self.L/Umin)*self.sa.mean()**0.5*self.xa_abs.max()))**2
+        # rat_max = (sa_bc/((self.L/Umax)*self.sa.mean()**0.5*self.xa_abs.min()))**2
+        # return (rat_min + 1)**0.5, (rat_max + 1)**0.5
 
     # def estimate_delta_xhat(self, sa_bc):
     #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)

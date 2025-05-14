@@ -171,8 +171,9 @@ for j, (label, vals) in enumerate(periodics.items()):
         # ax[j, 1].plot(pert.xp, 
         #               pert.preview_1d(std_pert + mean_pert), 
         #               color=fp.color(8 - 2*i, lut=12), lw=2)
-        ax[j, 2].plot(pert.xp, 
-                      pert.preview_2d(std_pert + mean_pert), 
+        print(pert.xp.shape)
+        prev, R = pert.preview_2d(std_pert + mean_pert)
+        ax[j, 2].plot(pert.xp, prev,
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         ax[j, 3].plot(pert.xp,
                       -(std_pert + mean_pert)*pert.g.sum(axis=1)/pert.xa,
@@ -198,17 +199,17 @@ for j, (label, vals) in enumerate(periodics.items()):
         #               lw=2, ls=':')
 
         # Sa first element scaled
-        sa_sf = dc(true.sa)
-        sa_sf[0] *= 100
-        pert_sa_BC = inv.Inversion(sa=sa_sf, BC=BC_pert, gamma=1, U=U)
+        # sa_sf = dc(true.sa)
+        # sa_sf[0] *= 100
+        pert_sa_BC = inv.Inversion(BC=BC_pert, gamma=1, U=U, buffer=True)
         rmse['Buffer'][label]['mean_pert'].append(mean_pert)
         rmse['Buffer'][label]['rmse'].append(
             tot_err(pert_sa_BC.xhat, pert_sa_BC.xa, true.xhat))
         rmse['Buffer'][label]['rmse_up'].append(
-            tot_err(pert.xhat[1:7], pert.xa[1:7], true.xhat[1:7]))
+            tot_err(pert.xhat[:7], pert.xa[:7], true.xhat[:7]))
         rmse['Buffer'][label]['rmse_down'].append(
             tot_err(pert.xhat[7:], pert.xa[7:], true.xhat[7:]))
-        ax[j, 5].plot(pert_sa_BC.xp,
+        ax[j, 5].plot(pert_sa_BC.xp[:-1],
                       (pert_sa_BC.xhat - true.xhat)/true.xa, 
                       color=fp.color(8 - 2*i, lut=12), lw=2)
         # delta_signal = ((pert_sa_BC.g - true.g) @ (true.y - true.ya))/true.xhat
@@ -389,7 +390,7 @@ custom_patches = [Line2D([0], [0], color=colors[0], lw=4, ls='-', alpha=0.75),
                   Line2D([0], [0], color='grey', lw=3, ls='-', alpha=0.5),
                   Line2D([0], [0], color='grey', lw=3, ls='-', alpha=1)
 ]
-custom_labels = ['True error',
+custom_labels = ['No correction method',
                  'Boundary method',
                  'Buffer method', 
                  'Upwind error',

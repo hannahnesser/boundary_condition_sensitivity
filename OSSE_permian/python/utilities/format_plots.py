@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from scipy.ndimage import zoom
 from collections import OrderedDict
 from os.path import join
 
@@ -34,15 +35,22 @@ def cmap_from_color(color_high, color_low=(1, 1, 1), N=100):
     cmap = colors.LinearSegmentedColormap.from_list('cmap', rgb_map, N=N)
     return cmap
 
-def cmap_trans(cmap, ncolors=300, nalpha=20):
+def cmap_trans(cmap, ncolors=300, nalpha=20, set_bad=None, reverse=False):
     color_array = plt.get_cmap(cmap)(range(ncolors))
 
     # change alpha values
     color_array[:,-1] = np.append(np.linspace(0.0, 1.0, nalpha),
                                   np.ones(ncolors-nalpha))
+    
+    if reverse:
+        color_array = color_array[::-1, :]
 
     # create a colormap object
-    map_object = LinearSegmentedColormap.from_list(name=str(cmap) + '_trans',colors=color_array)
+    map_object = LinearSegmentedColormap.from_list(
+        name=str(cmap) + '_trans', colors=color_array)
+
+    if set_bad is not None:
+        map_object.set_bad(color=set_bad)
 
     return map_object
 
@@ -311,3 +319,32 @@ def save_fig(fig, loc, name, **kwargs):
                 dpi=500,
                 transparent=True, **kwargs)
     print('Saved %s' % name + '.png')
+
+
+def plot_clusters(sv_data, ax=None, **kw):
+    # Plot outlines
+    lat_min, lat_max = sv_data['lat'].min().values, sv_data['lat'].max().values
+    lon_min, lon_max = sv_data['lon'].min().values, sv_data['lon'].max().values
+    sv = sv_data.values
+    sv = np.concatenate([sv[:, 0][:, None], sv, sv[:, -1][:, None]], axis=1)
+    sv = np.concatenate([sv[0, :][None, :], sv, sv[-1, :][None, :]], axis=0)
+    sv = zoom(sv, 50, order=0, mode='nearest')
+    sv_max = np.nanmax(sv) + 1
+    colors = kw.pop('colors', 'black')
+    linestyles = kw.pop('linestyles', None)
+    linewidths = kw.pop('linewidths', 1.5)
+    ax.contour(sv, levels=np.arange(0, sv_max + 1, 1),
+               extent=[lon_min - 0.3125/2 - 0.1, 
+                       lon_max + 0.3125/2 + 0.1, 
+                       lat_min - 0.25/2 - 0.1, 
+                       lat_max + 0.25/2 + 0.1],
+               colors=colors, linewidths=linewidths, linestyles=linestyles, 
+               zorder=20)
+    
+    # # Plot zeros
+    # sv_z = sv_data.where(sv_data == 0)
+    # x, y = np.meshgrid(sv_z['lon'], sv_z['lat'])
+    # ax.pcolor(x, y, sv_z.values, hatch='/////', alpha=0, zorder=20,
+    #           linewidths=0.5)
+    
+    return ax

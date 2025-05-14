@@ -102,6 +102,7 @@ def make_axes(rows=1, cols=1, aspect=None,
     kw['sharex'] = fig_kwargs.pop('sharex', True)
     kw['sharey'] = fig_kwargs.pop('sharey', False)
     kw['width_ratios'] = fig_kwargs.pop('width_ratios', None)
+    kw['height_ratios'] = fig_kwargs.pop('height_ratios', None)
     # kw['width_ratios'] = fig_kwargs.pop('width_ratios', None)
     # if (rows + cols) > 2:
     #     kw['constrained_layout'] = True
