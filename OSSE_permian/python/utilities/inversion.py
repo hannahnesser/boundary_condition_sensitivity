@@ -420,14 +420,6 @@ class Inversion(OSSE):
         return clusters_new, buffer_idx
 
 
-    # def prepare_buffer_plots(self):
-    #     clusters_plot = self.clusters.copy()
-    #     self.clusters_plot = clusters_plot.where(
-    #         clusters_plot.isin(self.cluster_idx + 1), 0)
-    #     xhat_plot = self.xhat[self.cluster_idx]
-    #     self.xhat_plot = grid.clusters_1d_to_2d(xhat_plot, self.clusters_plot,
-    #                                             default_value=1)
-
     def preview(self, sa_bc, ils_threshold=0.1, 
                 lat_delta=0.25, lon_delta=0.3125,
                 plot_dir=None, plot_str=None):
@@ -582,101 +574,4 @@ class Inversion(OSSE):
         print(f'  Mean so : {so_mean**0.5}')
         print(f'  R : {so_mean/(np.mean(k_i)**2*sa):.2f}')
 
-        # gain = np.linalg.inv(sa_inv + k.T @ so_inv @ k) @ k.T @ so_inv
-        # diff_1d = -sa_bc*gain.sum(axis=1)/np.mean(self.xa)
-        # ils = np.argwhere(diff_1d <= ils_threshold)[0]
-        # # fig, ax = fp.get_figax()
-        # # ax.plot(diff_1d)
-        # # fp.save_fig(fig, plot_dir, 'temp')
-        # print(diff_1d)
-
         return (diff/g['x_i'])[::-1]
-
-        # # Yet another attempt
-        # kx_i = k_i * g['x_i']
-        # kx_up = k_up * g['x_up']
-        # sa_so_up = sa / g['so_up']
-        # so_i_so_up = g['so_i'] / g['so_up']
-        # so_i_sa = g['so_i'] / sa
-
-        # num = (sa_bc * kx_i)
-        # den1 = kx_up**2 * ( sa_so_up * kx_i**2)
-        # den2 = kx_up**2 * so_i_so_up
-        # den3 = kx_up**2
-        # den4 = kx_i**2
-        # den5 = so_i_sa
-        # den = kx_up**2 * ( sa_so_up * kx_i**2 + so_i_so_up + 1 ) + kx_i**2 + so_i_sa
-        # delta_xhat = - num / den
-
-        # return delta_xhat.values[::-1], den1[::-1], den2[::-1], den3[::-1], den4[::-1], den5[::-1]
-
-
-    # def estimate_delta_xhat_1d(self, sa_bc, 
-    #                            lat_delta=0.25, lon_delta=0.3125,
-    #                            plot_dir=None, plot_str=None):
-        
-    #     g = self.clusters.copy().to_dataset()
-    #     g['x_i'] = grid.clusters_1d_to_2d(self.xa_abs, self.clusters)
-
-    #     # Get the minimum distance to the edge for each grid point. 
-    #     # D1: Distance to the southern border
-    #     # D2: Distance to the northern border
-    #     # D3: Distance to the western border
-    #     # D4: Distance to the eastern border
-    #     g = g.where(g['StateVector'] > 0, 
-    #                 drop=True).to_dataframe().reset_index()
-    #     g['D1'] = grid.distance(g['lon'], g['lat'], 
-    #                             g['lon'], g['lat'].min() - lat_delta/2)
-    #     g['D2'] = grid.distance(g['lon'], g['lat'], 
-    #                             g['lon'], g['lat'].max() + lat_delta/2)
-    #     g['D3'] = grid.distance(g['lon'], g['lat'], 
-    #                             g['lon'].min() - lon_delta/2, g['lat'])
-    #     g['D4'] = grid.distance(g['lon'], g['lat'], 
-    #                             g['lon'].max() + lon_delta/2, g['lat'])
-    #     D = g[['D1', 'D2', 'D3', 'D4']].min(axis=1).values
-    #     D_idx = g[['D1', 'D2', 'D3', 'D4']].values.argmin(axis=1) # km
-
-    #     if plot_dir is not None:
-    #         fig, ax[0, 0], c = ip.plot_state(
-    #             g['x_i'], self.clusters, title=r'Prior emissions',
-    #             vmin=0, vmax=6,
-    #             fig_kwargs={'figax' : [fig, ax[0, 0]]},
-    #             cbar_kwargs={'horizontal' : True, 
-    #                          'title' : 'Methane emissions\n'r'(kg/km$^2$/hr)'})
-
-    #         fig, ax[0, 1], c = ip.plot_state(
-    #             D, self.clusters, title=r'Distance to boundary ($L_{up}$)',
-    #             fig_kwargs={'figax' : [fig, ax[0, 1]]},
-    #             cbar_kwargs={'horizontal' : True, 'title' : 'Distance (m)'})
-
-    #     # Get the corresponding upstream emissions (taking the mean of xa_abs 
-    #     # technically doesn't account for grid cell size, but this should be
-    #     # fine on regional domains)
-    #     # First, get observation counts for each grid cell (needed for upstream
-    #     # counts)
-    #     lats = np.round(self.lat/lat_delta)*lat_delta
-    #     lons = np.round(self.lon/lon_delta)*lon_delta
-    #     counts = pd.DataFrame({'lat' : lats,
-    #                            'lon' : lons,
-    #                            'count_i' : np.ones(len(self.lat))})
-    #     counts = counts.groupby(['lat', 'lon']).count()['count_i'].reset_index()
-    #     g = pd.merge(g, counts, on=['lat', 'lon'], how='left')
-    #     # Get the size of each grid cell (approximate)
-    #     g['lat_min'] = g['lat'] - lat_delta/2
-    #     g['lat_max'] = g['lat'] + lat_delta/2
-    #     g['lon_min'] = g['lon'] - lon_delta/2
-    #     g['lon_max'] = g['lon'] + lon_delta/2
-    #     g['lat_dist'] = grid.distance(g['lon'], g['lat_min'], 
-    #                                   g['lon'], g['lat_max'])
-    #     g['lon_dist'] = grid.distance(g['lon_min'], g['lat'],
-    #                                   g['lon_max'], g['lat'])
-    #     L = np.sqrt(g['lat_dist']*g['lon_dist']) # km
-
-
-    #     U = 4*(60**2/1000) # Wind speed, m/s -> km/hr
-    #     Mair = 28.97 # Molar mass dry air, g/mol
-    #     MCH4 = 16.01 # Molar mass methane, g/mol # These units cancel out
-    #     grav = 9.8/1000*(60**4) # Acceleration due to gravity, m/s2 -> km/hr2
-    #     p = 1e5*1000*(60**4) # Surface pressure, Pa = kg/m/s2 -> kg/km/hr2
-    #     k_i = 1e9*(Mair/MCH4)*L*grav/(U*p)
-    #     k_up = 1e9*(Mair/MCH4)*D*grav/(U*p)

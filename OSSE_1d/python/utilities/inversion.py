@@ -219,14 +219,10 @@ class Inversion(ForwardModel):
         self.buffer = buffer
         if self.buffer:
             self.p = self.estimate_p(sa_BC)
-            # print('  Buffer scale factor : ', self.p)
             self.sa[0] *= self.p**2
 
         # Prior model simulation
         self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).T.flatten()
-        # print(self.ya)
-        # self.ya = self.ya.flatten()
-        # print(self.ya)
 
         # Build the Jacobian
         if k is None:
@@ -318,9 +314,7 @@ class Inversion(ForwardModel):
             print('Sequential BC optimized : ', self.xhat)
             
             # Update parameters with output of first inversion
-            ## HON: This currently only works for opt_BC_n == 1
             self.BC = self.xhat*np.ones(len(self.BC))
-            # self.ya = self.forward_model(x=self.xa_abs, BC=self.BC).T.flatten()
             self.xa[-self.opt_BC_n:] = self.xhat
             self.c = self.xhat*np.ones(self.nobs)
 
@@ -354,7 +348,7 @@ class Inversion(ForwardModel):
         self.a = np.identity(len(xa)) - self.shat @ sa_inv
         self.xhat = (xa + self.g @ (y - k @ xa - c))
         self.yhat = k @ self.xhat + c
-        # print(f'  Prior cost function : {self.cost_prior():.2f} (n={self.xhat.shape})')
+
 
     def get_gamma(self, tol=1e-1):
         print('Finding gamma...')
@@ -376,14 +370,10 @@ class Inversion(ForwardModel):
         print('Gamma found! Adjusting So.')
         print('-'*70)
 
-    def cost_function(self):
-        ...
 
     def cost_prior(self):
         return (((self.xhat - self.xa)**2)/self.sa).sum()
 
-    def cost_obs(self):
-        ...
 
     def calculate_BC_bias_metrics(self):
         # First, calculate the contributions from the boundary condition
@@ -399,8 +389,6 @@ class Inversion(ForwardModel):
             self.bc_contrib = self.g @ self.c
             self.xa_contrib = self.a @ self.xa[:self.nstate]
 
-        # # Calculate the total model correrction
-        # self.tot_correct = self.g @ self.y - (self.bc_contrib + self.xa_contrib)
 
     def remove_BC_elements(self):
         if self.opt_BC:
@@ -439,30 +427,11 @@ class Inversion(ForwardModel):
 
             self.g_BC = self.g[0, :]
             self.g = self.g[1:, :]
-            
-            # self.bc_contrib = self.bc_contrib[1:]
-            # self.xa_contrib = self.xa_contrib[1:]
 
     def estimate_D(self, sa_bc, R):
-        # k = np.abs(self.U).mean()/self.L
-        # xa = self.xa_abs
-        # xd = np.append(0, np.cumsum(self.xa_abs))[:-1]
-        # so = (self.so**0.5).mean()**2
-        # D = np.abs(xa*k*sa_bc/(R*xd**2) - k**2*so/(self.sa*xd**2) - xa**2/xd**2)
-        # return self.L*np.sqrt(D)
         delta_xhat = np.abs(self.estimate_delta_xhat(sa_bc))
         return np.where(delta_xhat < R*delta_xhat.max())
 
-    # def preview_1d(self, sa_bc):
-    #     U = np.abs(self.U).mean()
-    #     k = self.L/U*np.tril(np.ones((self.nstate, self.nstate)))*self.xa_abs.mean()
-    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2 # individual 
-    #     so_inv = np.diag(1/(so*np.ones(self.nstate)))
-    #     g = np.linalg.inv(np.diag(1/self.sa) + k.T @ so_inv @ k) @ k.T @ so_inv
-    #     return -sa_bc*g.sum(axis=1)/self.xa
-
-    # This is using the full 2x2 example, but it generates an estimate that is
-    # too low
     def preview_2d(self, sa_bc):
         # Transport
         D = np.arange(self.L, self.L*self.nstate + self.L, self.L)
@@ -474,9 +443,6 @@ class Inversion(ForwardModel):
         # Prior and prior uncertainty
         sa_i = (self.xa_abs**2*self.sa)[1:]
         sa_up = (np.cumsum(self.xa_abs)**2*self.sa)[:-1]
-        # print(self.xa_abs)
-        # print(self.xa_abs[1:])
-        # print(np.cumsum(self.xa_abs))
 
         # Observing system errors 
         so_i = ((self.so.mean()/self.nobs_per_cell)**0.5)**2 # individual 
@@ -496,27 +462,11 @@ class Inversion(ForwardModel):
         so_mean = (np.mean(so_i**0.5)**2)
         sa = np.mean(self.sa**0.5)**2*np.mean(self.xa_abs)**2
 
-        # print('Estimating R')
-        # print(f'  Mean K : {np.mean(k_i):.2f}')
-        # print(f'  Mean sa : {sa**0.5:.2f}')
-        # print(f'  Mean so : {so_mean**0.5}')
-        # print(f'  R : {so_mean/(np.mean(k_i)**2*sa):.2f}')
         R = so_mean/(np.mean(k_i)**2*sa)
         print('  R : ', 1/R)
 
         return - np.append(delta_xhat_0, delta_xhat)/self.xa_abs, R
-        
-        # kx_i = k_i * self.xa_abs
-        # kx_up = k_up * x_up
-        # sa_so_up = self.sa / so_up
-        # so_i_so_up = so / so_up
-        # so_i_sa = so / self.sa
 
-        # num = (sa_bc * kx_i)
-        # den = kx_up**2 * ( sa_so_up * kx_i**2 + so_i_so_up + 1 ) + kx_i**2 + so_i_sa
-        # delta_xhat = - num / den
-
-        # return delta_xhat
 
     def estimate_p(self, sa_bc):
         try: 
@@ -537,37 +487,3 @@ class Inversion(ForwardModel):
         p_max = sa_bc/(tau_min*sa_min*R_sqrt_min)
         print('  Buffer scale factor : ', p_min, p_max)
         return p_max
-        # rat_min = (sa_bc/((self.L/Umin)*self.sa.mean()**0.5*self.xa_abs.max()))**2
-        # rat_max = (sa_bc/((self.L/Umax)*self.sa.mean()**0.5*self.xa_abs.min()))**2
-        # return (rat_min + 1)**0.5, (rat_max + 1)**0.5
-
-    # def estimate_delta_xhat(self, sa_bc):
-    #     D = np.arange(self.L/2, self.L*self.nstate + self.L/2, self.L)
-    #     xD = np.append(0, np.cumsum(self.xa_abs))[:-1] + self.xa_abs/2
-    #     U = np.abs(self.U).mean()
-    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
-
-    #     kL = self.L/U
-    #     kD = D/U
-
-    #     numer = kL*self.sa*self.xa_abs*sa_bc # Not xa_abs^2 because we want relative change
-    #     denom = (self.sa*(kD**2*xD**2 + kL**2*self.xa_abs**2) + so)
-    #     # m2 ppb2/hr2
-        
-    #     # # Calculate covariance
-    #     # cov_xD = self.L**2*self.sa**2*self.xa_abs**2 + U**2*self.sa*so
-    #     # # m2 ppb2/hr2
-    #     # cov_x = D**2*self.sa**2*xD**2 + U**2*self.sa*so # m2 ppb2/hr2
-    #     # cov_xxD = -D*self.L*self.sa**2*self.xa_abs*xD
-
-    #     return -numer/denom #, cov_xD/denom, cov_x/denom, cov_xxD/denom
-
-    # def estimate_avker(self):
-    #     so = ((self.so.mean()/self.nobs_per_cell)**0.5)**2
-    #     U = np.abs(self.U).mean()
-    #     kL = self.L/U
-    #     a_est = self.sa / (self.sa + so/kL**2)
-    #     return a_est
-
-    # def estimate_a():
-    #     k_est = np.ones()
