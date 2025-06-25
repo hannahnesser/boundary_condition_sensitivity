@@ -1,23 +1,18 @@
 name: bc_sensitivity
-channels:
-  - intel
-  - conda-forge
-  - anaconda
-  - defaults
 dependencies:
-  - cartopy=0.17.0
-  - dask=2021.1.0
-  - dask-core=2021.1.0
-  - h5py=2.10.0
-  - hdf5=1.10.6
-  - ipython=7.19.0
-  - matplotlib=3.2.2
-  - netcdf4=1.5.5.1
-  - numpy=1.19.1
-  - pandas=1.1.0
-  - python=3.8.5
-  - scipy=1.5.2
-  - xarray=0.16.2
-  - xbpch=0.3.5
-  - xesmf=0.3.0
-prefix: /Users/hannahnesser/opt/anaconda3/envs/bc_sensitivity
+  - cartopy
+  - dask
+  - dask-core
+  - h5py
+  - hdf5
+  - ipython
+  - matplotlib
+  - netcdf4
+  - numpy
+  - pandas
+  - python
+  - scipy
+  - xarray
+  - xbpch
+  - xesmf
+prefix: /opt/homebrew/Caskroom/mambaforge/base/envs/bc_sensitivity
