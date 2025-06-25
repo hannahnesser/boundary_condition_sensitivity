@@ -25,7 +25,6 @@ np.set_printoptions(precision=3, linewidth=300, suppress=True)
 # File Locations
 ## -------------------------------------------------------------------------##
 project_dir, config = utils.setup()
-data_dir = f'{project_dir}/data/data_OSSE'
 plot_dir = f'{project_dir}/plots'
 if not os.path.exists(plot_dir):
     os.mkdir(plot_dir)

@@ -11,7 +11,6 @@ from utilities import format_plots as fp
 from utilities import utils
 
 project_dir, config = utils.setup()
-data_dir = f'{project_dir}/data/data_OSSE'
 plot_dir = f'{project_dir}/plots'
 
 # rcParams['text.usetex'] = True

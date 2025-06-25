@@ -11,7 +11,7 @@ from utilities import inversion_plot as ip
 from utilities import utils, grid
 
 project_dir, config = utils.setup()
-data_dir = f'{project_dir}/data/data_OSSE'
+data_dir = f'{project_dir}/data'
 plot_dir = f'{project_dir}/plots'
 
 # rcParams['text.usetex'] = True

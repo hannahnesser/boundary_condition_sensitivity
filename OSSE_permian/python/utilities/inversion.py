@@ -8,7 +8,7 @@ from utilities import utils, grid
 from utilities import inversion_plot as ip
 
 project_dir, config = utils.setup()
-data_dir = f'{project_dir}/data/data_OSSE'
+data_dir = f'{project_dir}/data'
 
 class OSSE:
     def __init__(self, xtrue, random_state):
