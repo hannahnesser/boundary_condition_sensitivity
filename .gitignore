@@ -42,3 +42,5 @@ paper/
 python_archive/
 OSSE_1d/python/archive/
 OSSE_permian/python/archive/
+OSSE_permian/data/
+OSSE_permian/archive/
